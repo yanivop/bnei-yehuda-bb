@@ -1,0 +1,1120 @@
+#!/usr/bin/env node
+/**
+ * Bnei Yehuda Basketball – HTML Report Generator
+ * Fetches all remaining season matches and writes a self-contained report.html
+ */
+
+import { writeFileSync } from "fs";
+
+const CONFIG = {
+  baseUrl: "https://ibasketball.co.il/wp-json/sportspress/v2",
+  seasonId: "119472",
+  clubId: "715472",
+  perPage: 100,
+};
+
+// ─── Config: leagues to exclude from the report ──────────────────────────────
+const EXCLUDED_LEAGUES = new Set([
+  "ארצית נשים מרכז",
+  "א נשים מרכז",
+  "א דן",
+  "ב תל אביב",
+]);
+
+// ─── API ──────────────────────────────────────────────────────────────────────
+
+async function apiFetch(endpoint, params = {}) {
+  const url = new URL(`${CONFIG.baseUrl}/${endpoint}`);
+  for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
+  const res = await fetch(url.toString());
+  if (!res.ok) throw new Error(`API ${res.status}: ${url}`);
+  return { data: await res.json(), headers: res.headers };
+}
+
+function decodeHtml(str) {
+  if (!str) return str;
+  return str
+    .replace(/&quot;/g, '"').replace(/&#34;/g, '"')
+    .replace(/&amp;/g, "&").replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">").replace(/&#039;/g, "'")
+    .replace(/&apos;/g, "'").replace(/\u05f4/g, '"').replace(/\u05f3/g, "'");
+}
+
+const venueCache = new Map();
+async function getVenueName(id) {
+  if (!id) return null;
+  if (venueCache.has(id)) return venueCache.get(id);
+  try {
+    const { data } = await apiFetch(`venues/${id}`);
+    venueCache.set(id, data.name || null);
+    return data.name || null;
+  } catch { venueCache.set(id, null); return null; }
+}
+
+async function fetchAllMatches() {
+  const from = new Date();
+  from.setHours(0, 0, 0, 0);
+  const allEvents = [];
+  let page = 1;
+  let totalPages = 1;
+
+  while (page <= totalPages) {
+    console.log(`  Fetching page ${page}/${totalPages}…`);
+    const { data, headers } = await apiFetch("events", {
+      order: "asc", seasons: CONFIG.seasonId, clubs: CONFIG.clubId,
+      per_page: CONFIG.perPage, after: from.toISOString(), page,
+    });
+    totalPages = parseInt(headers.get("x-wp-totalpages") || "1", 10);
+    allEvents.push(...data);
+    page++;
+  }
+
+  // Resolve all venue names in parallel
+  const venueIds = [...new Set(allEvents.flatMap(e => e.venues || []))];
+  await Promise.all(venueIds.map(getVenueName));
+
+  return allEvents
+    .map(normalizeEvent)
+    .filter(m => !EXCLUDED_LEAGUES.has(m.league));
+}
+
+function normalizeEvent(raw) {
+  const hp = raw.home?.points;
+  const ap = raw.away?.points;
+  const hasScore = hp !== null && ap !== null && hp !== undefined && ap !== undefined;
+  return {
+    id: raw.id,
+    date: raw.date,
+    dateLabel: formatDateHebrew(raw.date),
+    timeLabel: raw.date.slice(11, 16),
+    status: raw.status,
+    home: decodeHtml(raw.home?.team) || "—",
+    away: decodeHtml(raw.away?.team) || "—",
+    homeLink: raw.home?.link || null,
+    awayLink: raw.away?.link || null,
+    score: hasScore ? `${hp}–${ap}` : null,
+    homePoints: hasScore ? hp : null,
+    awayPoints: hasScore ? ap : null,
+    winner: raw.winner || null,
+    league: (decodeHtml(raw.league?.name) || "—").replace(/["'״׳]/g, ""),
+    gender: raw.league?.gender || null,
+    venue: (raw.venues || []).map(id => venueCache.get(id)).filter(Boolean)[0] || null,
+    matchUrl: raw.link || null,
+  };
+}
+
+function formatDateHebrew(iso) {
+  const d = new Date(iso);
+  const days = ["ראשון","שני","שלישי","רביעי","חמישי","שישי","שבת"];
+  const months = ["ינואר","פברואר","מרץ","אפריל","מאי","יוני","יולי","אוגוסט","ספטמבר","אוקטובר","נובמבר","דצמבר"];
+  return `יום ${days[d.getDay()]}, ${d.getDate()} ב${months[d.getMonth()]} ${d.getFullYear()}`;
+}
+
+// ─── HTML Template ────────────────────────────────────────────────────────────
+
+function buildHtml(matches) {
+  // Unique team+league combinations, sorted by team name then league
+  const teamLeagueSeen = new Map();
+  for (const m of matches) {
+    const ourTeam = m.home.includes("בני יהודה") ? m.home : m.away.includes("בני יהודה") ? m.away : null;
+    if (!ourTeam) continue;
+    const key = `${ourTeam}||${m.league}`;
+    if (!teamLeagueSeen.has(key)) teamLeagueSeen.set(key, { team: ourTeam, league: m.league });
+  }
+  const ourTeams = [...teamLeagueSeen.values()]
+    .sort((a, b) => a.team.localeCompare(b.team, "he") || a.league.localeCompare(b.league, "he"));
+
+  const jsonData = JSON.stringify(matches);
+  const jsonTeams = JSON.stringify(ourTeams);
+  const genDate = new Date().toLocaleDateString("he-IL", { day:"numeric", month:"long", year:"numeric" });
+
+  return `<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>לוח משחקים – בני יהודה כדורסל</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;700;800;900&family=Bebas+Neue&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink:    #0d0d0d;
+    --paper:  #f5f0e8;
+    --cream:  #ede8dc;
+    --orange: #e85d04;
+    --amber:  #f48c06;
+    --gold:   #ffd166;
+    --cool:   #023e8a;
+    --text:   #1a1a1a;
+    --muted:  #6b6560;
+    --line:   rgba(0,0,0,0.12);
+    --radius: 4px;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Heebo', sans-serif;
+    background: var(--paper);
+    color: var(--text);
+    min-height: 100vh;
+    line-height: 1.5;
+  }
+
+  /* ── MASTHEAD ── */
+  .masthead {
+    background: var(--ink);
+    color: var(--paper);
+    padding: 0;
+    position: relative;
+    overflow: hidden;
+  }
+  .masthead::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background:
+      repeating-linear-gradient(0deg, transparent, transparent 59px, rgba(255,255,255,0.04) 59px, rgba(255,255,255,0.04) 60px),
+      repeating-linear-gradient(90deg, transparent, transparent 59px, rgba(255,255,255,0.04) 59px, rgba(255,255,255,0.04) 60px);
+    pointer-events: none;
+  }
+  .masthead-inner {
+    position: relative;
+    max-width: 1300px;
+    margin: 0 auto;
+    padding: 48px 40px 36px;
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 24px;
+  }
+  .club-badge {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .club-label {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--orange);
+    opacity: 0.9;
+  }
+  .club-name {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: clamp(52px, 7vw, 96px);
+    line-height: 0.9;
+    letter-spacing: 0.02em;
+    color: var(--paper);
+  }
+  .club-name span {
+    color: var(--orange);
+  }
+  .season-info {
+    text-align: left;
+    flex-shrink: 0;
+  }
+  .season-tag {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.15em;
+    color: var(--muted);
+    text-transform: uppercase;
+    margin-bottom: 4px;
+  }
+  .season-val {
+    font-size: 28px;
+    font-weight: 800;
+    color: var(--gold);
+    white-space: nowrap;
+  }
+  .total-count {
+    font-size: 13px;
+    color: rgba(245,240,232,0.5);
+    margin-top: 4px;
+  }
+
+  /* ── TICKER LINE ── */
+  .ticker {
+    background: var(--orange);
+    height: 3px;
+  }
+
+  /* ── TOOLBAR ── */
+  .toolbar {
+    background: var(--cream);
+    border-bottom: 1px solid var(--line);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+  }
+  .toolbar-inner {
+    max-width: 1300px;
+    margin: 0 auto;
+    padding: 0 40px;
+    display: flex;
+    align-items: stretch;
+    gap: 0;
+    min-height: 56px;
+    flex-wrap: wrap;
+  }
+  .toolbar-section {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 24px 12px 0;
+    border-left: 1px solid var(--line);
+    flex-shrink: 0;
+  }
+  .toolbar-section:first-child { padding-right: 0; }
+  .toolbar-section:last-child { border-left: none; padding-right: 0; padding-left: 0; margin-right: auto; }
+
+  .section-label {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    color: var(--muted);
+    text-transform: uppercase;
+    white-space: nowrap;
+    margin-left: 4px;
+  }
+
+  /* Toggle buttons */
+  .btn-group { display: flex; gap: 3px; }
+  .btn-toggle {
+    font-family: 'Heebo', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 6px 14px;
+    border: 1.5px solid var(--line);
+    border-radius: 100px;
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    transition: all 0.15s;
+    white-space: nowrap;
+  }
+  .btn-toggle:hover { border-color: var(--orange); color: var(--orange); }
+  .btn-toggle.active {
+    background: var(--orange);
+    border-color: var(--orange);
+    color: white;
+    box-shadow: 0 2px 8px rgba(232,93,4,0.35);
+  }
+
+  /* Sort select */
+  .sort-select {
+    font-family: 'Heebo', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 6px 12px;
+    border: 1.5px solid var(--line);
+    border-radius: 100px;
+    background: white;
+    color: var(--text);
+    cursor: pointer;
+    outline: none;
+    transition: border-color 0.15s;
+    appearance: none;
+    -webkit-appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M0 0l6 8 6-8z' fill='%23888'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: left 12px center;
+    padding-left: 28px;
+  }
+  .sort-select:focus { border-color: var(--orange); }
+
+  /* Team dropdown */
+  .team-dropdown-wrap { position: relative; }
+  .btn-teams {
+    font-family: 'Heebo', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 6px 14px;
+    border: 1.5px solid var(--line);
+    border-radius: 100px;
+    background: white;
+    color: var(--text);
+    cursor: pointer;
+    transition: all 0.15s;
+    white-space: nowrap;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .btn-teams:hover, .btn-teams.open { border-color: var(--orange); color: var(--orange); }
+  .btn-teams .badge {
+    background: var(--orange);
+    color: white;
+    border-radius: 100px;
+    font-size: 10px;
+    font-weight: 800;
+    padding: 1px 6px;
+    min-width: 18px;
+    text-align: center;
+    line-height: 1.5;
+  }
+  .team-menu {
+    display: none;
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    background: white;
+    border: 1.5px solid var(--line);
+    border-radius: 12px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.14);
+    padding: 12px 0;
+    min-width: 260px;
+    z-index: 200;
+    max-height: 380px;
+    overflow-y: auto;
+  }
+  .team-menu.open { display: block; }
+  .team-menu-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 4px 16px 12px;
+    border-bottom: 1px solid var(--line);
+    margin-bottom: 8px;
+  }
+  .team-menu-header span { font-size: 11px; font-weight: 700; color: var(--muted); letter-spacing: 0.1em; text-transform: uppercase; }
+  .team-menu-actions { display: flex; gap: 10px; }
+  .team-menu-actions button {
+    font-family: 'Heebo', sans-serif;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--orange);
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+  .team-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 7px 16px;
+    cursor: pointer;
+    transition: background 0.1s;
+  }
+  .team-item:hover { background: rgba(232,93,4,0.06); }
+  .team-item input[type="checkbox"] { accent-color: var(--orange); width: 15px; height: 15px; flex-shrink: 0; cursor: pointer; margin-top: 1px; align-self: flex-start; }
+  .team-item-text { display: flex; flex-direction: column; gap: 1px; }
+  .team-item-name { font-size: 14px; font-weight: 600; color: var(--text); }
+  .team-item-league { font-size: 11px; font-weight: 500; color: var(--muted); }
+
+  /* Mobile overlay backdrop */
+  .menu-backdrop {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.4);
+    z-index: 99;
+  }
+  .menu-backdrop.active { display: block; }
+
+  /* Results count */
+  .results-tag {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--muted);
+    white-space: nowrap;
+    padding: 6px 0;
+  }
+  .results-tag strong { color: var(--orange); }
+
+  /* ── MAIN ── */
+  .main {
+    max-width: 1300px;
+    margin: 0 auto;
+    padding: 32px 40px 60px;
+  }
+
+  /* ── TABLE ── */
+  .table-wrap {
+    background: white;
+    border-radius: 12px;
+    border: 1px solid var(--line);
+    overflow: hidden;
+    box-shadow: 0 2px 16px rgba(0,0,0,0.06);
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+  }
+  thead tr {
+    background: var(--ink);
+    color: var(--paper);
+  }
+  th {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    padding: 14px 16px;
+    text-align: right;
+    white-space: nowrap;
+    color: rgba(245,240,232,0.65);
+  }
+  th.col-score { text-align: center; }
+  th.col-venue { color: rgba(245,240,232,0.4); }
+
+  tbody tr {
+    border-bottom: 1px solid var(--line);
+    transition: background 0.12s;
+  }
+  tbody tr:last-child { border-bottom: none; }
+  tbody tr:hover { background: rgba(232,93,4,0.04); }
+  tbody tr.home-row { background: rgba(2,62,138,0.03); }
+  tbody tr.home-row:hover { background: rgba(2,62,138,0.07); }
+
+  td {
+    padding: 13px 16px;
+    vertical-align: middle;
+  }
+
+  /* Date cell */
+  .cell-date {
+    white-space: nowrap;
+    min-width: 120px;
+  }
+  .date-day {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--muted);
+    letter-spacing: 0.05em;
+  }
+  .date-full {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+    margin-top: 1px;
+  }
+  .date-time {
+    font-size: 11px;
+    color: var(--orange);
+    font-weight: 700;
+    margin-top: 1px;
+  }
+
+  /* Team cell */
+  .cell-team {
+    font-weight: 600;
+    font-size: 14px;
+  }
+  .our-team {
+    color: var(--cool);
+    font-weight: 700;
+  }
+  .home-badge, .away-badge {
+    display: inline-block;
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: 0.1em;
+    padding: 2px 6px;
+    border-radius: 3px;
+    margin-right: 6px;
+    vertical-align: middle;
+    line-height: 1.4;
+  }
+  .home-badge { background: var(--cool); color: white; }
+  .away-badge { background: var(--cream); color: var(--muted); border: 1px solid var(--line); }
+
+  /* Score cell */
+  .cell-score {
+    text-align: center;
+    min-width: 80px;
+  }
+  .score-box {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 22px;
+    letter-spacing: 0.03em;
+    color: var(--text);
+    line-height: 1;
+  }
+  .score-sep { font-size: 16px; color: var(--muted); }
+  .score-vs {
+    font-family: 'Heebo', sans-serif;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--muted);
+    letter-spacing: 0.1em;
+    padding: 4px 10px;
+    border: 1.5px solid var(--line);
+    border-radius: 100px;
+  }
+
+  /* League */
+  .cell-league { font-size: 13px; color: var(--muted); font-weight: 500; min-width: 140px; }
+  .gender-dot {
+    display: inline-block;
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    margin-left: 6px;
+    vertical-align: middle;
+  }
+  .gender-F { background: #e066b0; }
+  .gender-M { background: #3a86ff; }
+
+  /* Venue */
+  .cell-venue { font-size: 12px; color: #999; max-width: 200px; }
+  .venue-inline { display: none; }
+
+  /* Empty state */
+  .empty-state {
+    text-align: center;
+    padding: 80px 24px;
+    color: var(--muted);
+  }
+  .empty-state .empty-icon { font-size: 48px; margin-bottom: 12px; }
+  .empty-state p { font-size: 16px; font-weight: 500; }
+
+  /* ── DATE GROUP HEADER ROW ── */
+  tr.date-group-header td {
+    background: var(--cream);
+    padding: 8px 16px;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--muted);
+    border-bottom: 1px solid var(--line);
+  }
+
+  /* ── FOOTER ── */
+  .report-footer {
+    max-width: 1300px;
+    margin: 0 auto;
+    padding: 0 40px 40px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 12px;
+    color: var(--muted);
+    border-top: 1px solid var(--line);
+    padding-top: 20px;
+    margin-top: -8px;
+  }
+
+  /* ── MOBILE ──────────────────────────────────────────────── */
+  @media (max-width: 640px) {
+
+    /* Masthead */
+    .masthead-inner {
+      padding: 24px 16px 20px;
+      flex-direction: row;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .club-name { font-size: 44px; }
+    .club-label { font-size: 9px; }
+    .season-val { font-size: 20px; }
+    .total-count { font-size: 11px; }
+
+    /* Toolbar: 2 rows */
+    .toolbar-inner {
+      padding: 0 12px;
+      flex-wrap: wrap;
+      min-height: unset;
+      gap: 0;
+      row-gap: 0;
+    }
+    .toolbar-section {
+      padding: 10px 12px 10px 0;
+      border-left: none;
+      border-bottom: 1px solid var(--line);
+      flex-shrink: 1;
+    }
+    .toolbar-section:nth-child(1) { /* מיקום */
+      flex: 1;
+      min-width: 0;
+      padding-right: 0;
+    }
+    .toolbar-section:nth-child(2) { /* קבוצה */
+      width: 100%;
+      order: 3;
+      border-bottom: none;
+      padding-bottom: 10px;
+    }
+    .toolbar-section:nth-child(3) { /* מיון */
+      flex-shrink: 0;
+      padding-right: 0;
+      padding-left: 0;
+      border-bottom: 1px solid var(--line);
+    }
+    .toolbar-section:nth-child(4) { /* count */
+      order: 4;
+      border-bottom: none;
+      margin-right: auto;
+      padding: 8px 0;
+    }
+    .section-label { display: none; }
+    .btn-toggle { font-size: 12px; padding: 5px 11px; }
+    .sort-select { font-size: 12px; }
+
+    /* Team dropdown: full-width menu */
+    .team-dropdown-wrap { width: 100%; }
+    .btn-teams { width: 100%; justify-content: space-between; border-radius: 8px; }
+    .team-menu {
+      position: fixed;
+      top: auto;
+      bottom: 0;
+      right: 0;
+      left: 0;
+      width: 100%;
+      border-radius: 16px 16px 0 0;
+      border-bottom: none;
+      max-height: 60vh;
+      box-shadow: 0 -4px 32px rgba(0,0,0,0.18);
+    }
+
+    /* Main */
+    .main { padding: 12px 0 48px; }
+    .table-wrap {
+      border-radius: 0;
+      border-left: none;
+      border-right: none;
+      box-shadow: none;
+    }
+
+    /* Table → Card layout */
+    table, tbody { display: block; width: 100%; }
+    thead { display: none; }
+
+    /* Group header rows */
+    tr.date-group-header { display: block; }
+    tr.date-group-header td {
+      display: block;
+      font-size: 10px;
+      padding: 10px 16px 6px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    /* Match card */
+    tbody tr:not(.date-group-header) {
+      display: grid;
+      grid-template-areas:
+        "date  date"
+        "home  home"
+        "score score"
+        "away  away"
+        "meta  meta";
+      grid-template-columns: 1fr;
+      margin: 8px 12px;
+      border-radius: 10px;
+      border: 1px solid var(--line) !important;
+      overflow: hidden;
+      box-shadow: 0 1px 6px rgba(0,0,0,0.07);
+      background: white;
+    }
+    tbody tr:not(.date-group-header):hover { background: white; }
+    tbody tr.home-row:not(.date-group-header) { background: white; }
+
+    td { display: block; border-bottom: none !important; padding: 0; }
+
+    /* Date — card header */
+    td.cell-date {
+      grid-area: date;
+      background: var(--ink);
+      padding: 8px 14px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    td.cell-date .date-day  { color: rgba(245,240,232,0.5); font-size: 10px; }
+    td.cell-date .date-full { color: var(--paper); font-size: 12px; margin-top: 0; }
+    td.cell-date .date-time { color: var(--gold); font-size: 12px; margin-top: 0; margin-right: auto; }
+
+    /* Home team */
+    td.col-home {
+      grid-area: home;
+      padding: 12px 14px 6px;
+      font-size: 15px;
+    }
+    /* Score */
+    td.col-score {
+      grid-area: score;
+      padding: 2px 14px;
+      text-align: right;
+    }
+    .score-vs { font-size: 10px; padding: 3px 8px; }
+    .score-box { font-size: 20px; }
+
+    /* Away team */
+    td.col-away {
+      grid-area: away;
+      padding: 6px 14px 12px;
+      font-size: 15px;
+    }
+
+    /* League — card footer */
+    td.col-league {
+      grid-area: meta;
+      background: var(--cream);
+      padding: 7px 14px;
+      font-size: 12px;
+      border-top: 1px solid var(--line) !important;
+    }
+    /* Venue — hidden on mobile, shown inline inside league cell */
+    td.col-venue { display: none !important; }
+    .venue-inline { display: inline; font-size: 11px; color: var(--muted); }
+
+    /* Footer */
+    .report-footer { padding: 16px 16px 32px; flex-direction: column; gap: 4px; text-align: center; }
+  }
+</style>
+</head>
+<body>
+
+<!-- MASTHEAD -->
+<header class="masthead">
+  <div class="masthead-inner">
+    <div class="club-badge">
+      <div class="club-label">מועדון כדורסל</div>
+      <div class="club-name">בני <span>יהודה</span></div>
+    </div>
+    <div class="season-info">
+      <div class="season-tag">עונה</div>
+      <div class="season-val">2025–2026</div>
+      <div class="total-count" id="total-matches-label"></div>
+    </div>
+  </div>
+</header>
+<div class="ticker"></div>
+
+<!-- TOOLBAR -->
+<div class="toolbar">
+  <div class="toolbar-inner">
+
+    <div class="toolbar-section">
+      <span class="section-label">מיקום</span>
+      <div class="btn-group">
+        <button class="btn-toggle active" data-location="all">הכל</button>
+        <button class="btn-toggle" data-location="home">בית</button>
+        <button class="btn-toggle" data-location="away">חוץ</button>
+      </div>
+    </div>
+
+    <div class="toolbar-section">
+      <span class="section-label">קבוצה</span>
+      <div class="team-dropdown-wrap">
+        <button class="btn-teams" id="teams-btn">
+          <span id="teams-label">כל הקבוצות</span>
+          <span class="badge" id="teams-badge" style="display:none">0</span>
+        </button>
+        <div class="team-menu" id="team-menu">
+          <div class="team-menu-header">
+            <span>קבוצות בני יהודה</span>
+            <div class="team-menu-actions">
+              <button onclick="selectAllTeams()">בחר הכל</button>
+              <button onclick="clearAllTeams()">נקה</button>
+            </div>
+          </div>
+          <div id="team-checkboxes"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="toolbar-section">
+      <span class="section-label">מיון</span>
+      <select class="sort-select" id="sort-select">
+        <option value="date">לפי תאריך</option>
+        <option value="team">לפי קבוצה</option>
+        <option value="league">לפי ליגה</option>
+      </select>
+    </div>
+
+    <div class="toolbar-section">
+      <div class="results-tag" id="results-tag">
+        <strong id="results-count">0</strong> משחקים
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div class="menu-backdrop" id="menu-backdrop"></div>
+
+<!-- MAIN -->
+<main class="main">
+  <div class="table-wrap">
+    <table id="matches-table">
+      <thead>
+        <tr>
+          <th class="col-date">תאריך</th>
+          <th class="col-home">קבוצת בית</th>
+          <th class="col-score">תוצאה</th>
+          <th class="col-away">קבוצת אורח</th>
+          <th class="col-league">ליגה</th>
+          <th class="col-venue">אולם</th>
+        </tr>
+      </thead>
+      <tbody id="matches-body"></tbody>
+    </table>
+  </div>
+</main>
+
+<footer class="report-footer">
+  <div>נוצר ב־${genDate}</div>
+  <div>מקור: ibasketball.co.il</div>
+</footer>
+
+<script>
+const MATCHES = ${jsonData};
+const OUR_TEAMS = ${jsonTeams};
+
+// State
+let filterLocation = 'all';    // 'all' | 'home' | 'away'
+let filterTeams = new Set();   // empty = show all
+let sortMode = 'date';         // 'date' | 'team' | 'league'
+
+// Determine if a team name belongs to our club
+function isOurs(name) {
+  return name.includes('בני יהודה');
+}
+
+function getOurTeam(match) {
+  if (isOurs(match.home)) return match.home;
+  if (isOurs(match.away)) return match.away;
+  return null;
+}
+
+function isHome(match) {
+  return isOurs(match.home);
+}
+
+// ── Build team+league checkboxes
+const checkboxContainer = document.getElementById('team-checkboxes');
+OUR_TEAMS.forEach(({ team, league }) => {
+  const key = \`\${team}||\${league}\`;
+  const item = document.createElement('label');
+  item.className = 'team-item';
+  item.innerHTML = \`
+    <input type="checkbox" value="\${key}" onchange="onTeamChange(this)">
+    <span class="team-item-text">
+      <span class="team-item-name">\${team}</span>
+      <span class="team-item-league">\${league}</span>
+    </span>\`;
+  checkboxContainer.appendChild(item);
+});
+
+function onTeamChange(cb) {
+  if (cb.checked) filterTeams.add(cb.value);
+  else filterTeams.delete(cb.value);
+  updateBadge();
+  render();
+}
+function selectAllTeams() {
+  filterTeams.clear();
+  checkboxContainer.querySelectorAll('input').forEach(cb => {
+    cb.checked = true;
+    filterTeams.add(cb.value);
+  });
+  updateBadge(); render();
+}
+function clearAllTeams() {
+  filterTeams.clear();
+  checkboxContainer.querySelectorAll('input').forEach(cb => cb.checked = false);
+  updateBadge(); render();
+}
+function updateBadge() {
+  const badge = document.getElementById('teams-badge');
+  const label = document.getElementById('teams-label');
+  if (filterTeams.size === 0 || filterTeams.size === OUR_TEAMS.length) {
+    badge.style.display = 'none';
+    label.textContent = 'כל הקבוצות';
+  } else {
+    badge.style.display = 'inline';
+    badge.textContent = filterTeams.size;
+    label.textContent = \`\${filterTeams.size} קבוצות\`;
+  }
+}
+
+// ── Toggle menu
+function closeTeamMenu() {
+  document.getElementById('team-menu').classList.remove('open');
+  document.getElementById('teams-btn').classList.remove('open');
+  document.getElementById('menu-backdrop').classList.remove('active');
+}
+document.getElementById('teams-btn').addEventListener('click', e => {
+  const menu = document.getElementById('team-menu');
+  const btn = document.getElementById('teams-btn');
+  const isOpen = menu.classList.contains('open');
+  if (isOpen) { closeTeamMenu(); }
+  else {
+    menu.classList.add('open');
+    btn.classList.add('open');
+    document.getElementById('menu-backdrop').classList.add('active');
+  }
+  e.stopPropagation();
+});
+document.getElementById('menu-backdrop').addEventListener('click', closeTeamMenu);
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeTeamMenu(); });
+
+// ── Location filter
+document.querySelectorAll('[data-location]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('[data-location]').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    filterLocation = btn.dataset.location;
+    render();
+  });
+});
+
+// ── Sort
+document.getElementById('sort-select').addEventListener('change', e => {
+  sortMode = e.target.value;
+  render();
+});
+
+// ── Filter & sort
+function getFiltered() {
+  let list = MATCHES.filter(m => {
+    // Location filter
+    if (filterLocation === 'home' && !isHome(m)) return false;
+    if (filterLocation === 'away' && isHome(m)) return false;
+    // Team filter (team||league composite key)
+    if (filterTeams.size > 0) {
+      const our = getOurTeam(m);
+      if (!our || !filterTeams.has(\`\${our}||\${m.league}\`)) return false;
+    }
+    return true;
+  });
+
+  if (sortMode === 'date') {
+    list.sort((a, b) => a.date.localeCompare(b.date));
+  } else if (sortMode === 'team') {
+    list.sort((a, b) => {
+      const ta = getOurTeam(a) || '';
+      const tb = getOurTeam(b) || '';
+      return ta.localeCompare(tb, 'he') || a.date.localeCompare(b.date);
+    });
+  } else if (sortMode === 'league') {
+    list.sort((a, b) => a.league.localeCompare(b.league, 'he') || a.date.localeCompare(b.date));
+  }
+  return list;
+}
+
+// ── Render
+function render() {
+  const tbody = document.getElementById('matches-body');
+  const list = getFiltered();
+  document.getElementById('results-count').textContent = list.length;
+
+  if (list.length === 0) {
+    tbody.innerHTML = \`<tr><td colspan="6">
+      <div class="empty-state">
+        <div class="empty-icon">🏀</div>
+        <p>לא נמצאו משחקים התואמים את הסינון</p>
+      </div>
+    </td></tr>\`;
+    return;
+  }
+
+  let html = '';
+  let lastGroupKey = null;
+
+  list.forEach(m => {
+    let groupKey;
+    if (sortMode === 'date') {
+      groupKey = m.date.slice(0, 10);
+    } else if (sortMode === 'team') {
+      groupKey = getOurTeam(m) || '—';
+    } else {
+      groupKey = m.league;
+    }
+
+    if (groupKey !== lastGroupKey) {
+      let groupLabel = groupKey;
+      if (sortMode === 'date') {
+        const d = new Date(groupKey);
+        const days = ['ראשון','שני','שלישי','רביעי','חמישי','שישי','שבת'];
+        const months = ['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'];
+        groupLabel = \`יום \${days[d.getDay()]}, \${d.getDate()} ב\${months[d.getMonth()]} \${d.getFullYear()}\`;
+      }
+      html += \`<tr class="date-group-header"><td colspan="6">\${groupLabel}</td></tr>\`;
+      lastGroupKey = groupKey;
+    }
+
+    const ourTeamIsHome = isHome(m);
+    const rowClass = ourTeamIsHome ? 'home-row' : '';
+    const homeClass = isOurs(m.home) ? 'our-team' : '';
+    const awayClass = isOurs(m.away) ? 'our-team' : '';
+    const homeBadge = \`<span class="home-badge">בית</span>\`;
+    const awayBadge = \`<span class="away-badge">חוץ</span>\`;
+
+    const scoreHtml = m.score
+      ? \`<div class="score-box"><span>\${m.homePoints}</span><span class="score-sep">–</span><span>\${m.awayPoints}</span></div>\`
+      : \`<span class="score-vs">נגד</span>\`;
+
+    const genderDot = m.gender
+      ? \`<span class="gender-dot gender-\${m.gender}" title="\${m.gender === 'F' ? 'נשים' : 'גברים'}"></span>\`
+      : '';
+
+    const venue = m.venue ? m.venue.split(',')[0] : '—';
+
+    const d = new Date(m.date);
+    const dayNames = ['א׳','ב׳','ג׳','ד׳','ה׳','ו׳','ש׳'];
+
+    html += \`<tr class="\${rowClass}">
+      <td class="cell-date">
+        <div class="date-day">יום \${dayNames[d.getDay()]}</div>
+        <div class="date-full">\${d.getDate().toString().padStart(2,'0')}.\${(d.getMonth()+1).toString().padStart(2,'0')}.\${d.getFullYear()}</div>
+        <div class="date-time">\${m.timeLabel}</div>
+      </td>
+      <td class="cell-team col-home">
+        \${ourTeamIsHome ? homeBadge : ''}<span class="\${homeClass}">\${m.home}</span>
+      </td>
+      <td class="cell-score col-score">\${scoreHtml}</td>
+      <td class="cell-team col-away">
+        \${!ourTeamIsHome ? awayBadge : ''}<span class="\${awayClass}">\${m.away}</span>
+      </td>
+      <td class="cell-league col-league">
+        \${genderDot}\${m.league}
+        \${venue !== '—' ? \`<span class="venue-inline"> · 📍 \${venue}</span>\` : ''}
+      </td>
+      <td class="cell-venue col-venue">\${venue}</td>
+    </tr>\`;
+  });
+
+  tbody.innerHTML = html;
+}
+
+// ── Init
+const total = MATCHES.length;
+document.getElementById('total-matches-label').textContent = \`\${total} משחקים עד סוף העונה\`;
+render();
+</script>
+</body>
+</html>`;
+}
+
+// ─── Main ─────────────────────────────────────────────────────────────────────
+
+async function main() {
+  const outFile = process.argv[2] || "report.html";
+  console.log("Bnei Yehuda – Report Generator");
+  console.log("================================");
+  console.log("Fetching all season matches…");
+
+  const matches = await fetchAllMatches();
+  console.log(`  ✓ ${matches.length} matches fetched`);
+
+  const html = buildHtml(matches);
+  writeFileSync(outFile, html, "utf8");
+  console.log(`  ✓ Report written to ${outFile}`);
+  console.log(`\nOpen with:  open ${outFile}`);
+}
+
+main().catch(err => { console.error("Error:", err.message); process.exit(1); });
