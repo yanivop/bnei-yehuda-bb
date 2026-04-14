@@ -20,6 +20,7 @@ const EXCLUDED_LEAGUES = new Set([
   "א דן",
   "ב תל אביב",
 ]);
+const EXCLUDED_LEAGUE_PREFIXES = ["קט סל"];
 
 // ─── API ──────────────────────────────────────────────────────────────────────
 
@@ -75,7 +76,8 @@ async function fetchAllMatches() {
 
   return allEvents
     .map(normalizeEvent)
-    .filter(m => !EXCLUDED_LEAGUES.has(m.league));
+    .filter(m => !EXCLUDED_LEAGUES.has(m.league) &&
+                 !EXCLUDED_LEAGUE_PREFIXES.some(p => m.league.startsWith(p)));
 }
 
 function normalizeEvent(raw) {
@@ -660,10 +662,6 @@ function buildHtml(matches) {
     overflow: hidden;
     box-shadow: 0 2px 12px rgba(232,93,4,0.12);
   }
-  .conflict-card.same-venue {
-    border-color: #d00000;
-    box-shadow: 0 2px 12px rgba(208,0,0,0.15);
-  }
   .conflict-header {
     background: var(--orange);
     color: white;
@@ -673,7 +671,6 @@ function buildHtml(matches) {
     justify-content: space-between;
     gap: 12px;
   }
-  .conflict-card.same-venue .conflict-header { background: #d00000; }
   .conflict-header-date { font-size: 13px; font-weight: 700; }
   .conflict-header-gap {
     font-size: 12px;
@@ -681,15 +678,6 @@ function buildHtml(matches) {
     opacity: 0.9;
     background: rgba(255,255,255,0.2);
     padding: 2px 10px;
-    border-radius: 100px;
-  }
-  .conflict-header-tag {
-    font-size: 10px;
-    font-weight: 800;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    background: rgba(255,255,255,0.25);
-    padding: 2px 8px;
     border-radius: 100px;
   }
   .conflict-body {
@@ -707,7 +695,6 @@ function buildHtml(matches) {
     color: var(--orange);
     margin-bottom: 4px;
   }
-  .conflict-card.same-venue .conflict-game-time { color: #d00000; }
   .conflict-game-team {
     font-size: 15px;
     font-weight: 800;
@@ -1290,8 +1277,7 @@ function detectConflicts() {
         const a = games[i], b = games[j];
         const diffMin = (new Date(b.date) - new Date(a.date)) / 60000;
         if (diffMin < 120) {
-          const sameVenue = !!(a.venue && b.venue && a.venue === b.venue);
-          conflicts.push({ day, a, b, diffMin: Math.round(diffMin), sameVenue });
+          conflicts.push({ day, a, b, diffMin: Math.round(diffMin) });
         }
       }
     }
@@ -1324,10 +1310,9 @@ function renderConflicts() {
     return;
   }
 
-  container.innerHTML = conflicts.map(({ day, a, b, diffMin, sameVenue }) => {
-    const tag = sameVenue ? '⚠️ אותו אולם!' : '⏱ פחות משעתיים';
+  container.innerHTML = conflicts.map(({ day, a, b, diffMin }) => {
     const gapLabel = diffMin === 0 ? 'באותה שעה' : \`הפרש \${diffMin} דקות\`;
-    const cardClass = sameVenue ? 'conflict-card same-venue' : 'conflict-card';
+    const cardClass = 'conflict-card';
 
     const gameHtml = (m) => \`
       <div class="conflict-game">
@@ -1343,7 +1328,6 @@ function renderConflicts() {
         <div class="conflict-header">
           <span class="conflict-header-date">\${formatDayLabel(day)}</span>
           <span class="conflict-header-gap">\${gapLabel}</span>
-          <span class="conflict-header-tag">\${tag}</span>
         </div>
         <div class="conflict-body">
           \${gameHtml(a)}
