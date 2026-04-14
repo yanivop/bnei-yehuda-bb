@@ -20,7 +20,9 @@ const EXCLUDED_LEAGUES = new Set([
   "א דן",
   "ב תל אביב",
 ]);
-const EXCLUDED_LEAGUE_PREFIXES = ["קט סל"];
+
+// Leagues excluded only from conflict detection (still shown in main schedule)
+const CONFLICTS_EXCLUDED_PREFIXES = ["קט סל"];
 
 // ─── API ──────────────────────────────────────────────────────────────────────
 
@@ -76,8 +78,7 @@ async function fetchAllMatches() {
 
   return allEvents
     .map(normalizeEvent)
-    .filter(m => !EXCLUDED_LEAGUES.has(m.league) &&
-                 !EXCLUDED_LEAGUE_PREFIXES.some(p => m.league.startsWith(p)));
+    .filter(m => !EXCLUDED_LEAGUES.has(m.league));
 }
 
 function normalizeEvent(raw) {
@@ -1037,6 +1038,7 @@ function buildHtml(matches) {
 <script>
 const MATCHES = ${jsonData};
 const OUR_TEAMS = ${jsonTeams};
+const CONFLICTS_EXCLUDED_PREFIXES = ${JSON.stringify(CONFLICTS_EXCLUDED_PREFIXES)};
 
 // State
 let filterLocation = 'all';    // 'all' | 'home' | 'away'
@@ -1258,7 +1260,10 @@ function render() {
 // ── Conflict detection ────────────────────────────────────────────────────────
 
 function detectConflicts() {
-  const homeGames = MATCHES.filter(m => isOurs(m.home));
+  const homeGames = MATCHES.filter(m =>
+    isOurs(m.home) &&
+    !CONFLICTS_EXCLUDED_PREFIXES.some(p => m.league.startsWith(p))
+  );
 
   // Group by date
   const byDate = new Map();
