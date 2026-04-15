@@ -820,8 +820,17 @@
     .report-footer { padding: 16px 16px 32px; flex-direction: column; gap: 4px; text-align: center; }
 
     /* Tabs */
-    .tab-bar { padding: 12px 12px 0; margin-bottom: 12px; }
-    .tab-btn { font-size: 13px; padding: 8px 14px; }
+    .tab-bar {
+      padding: 12px 12px 0;
+      margin-bottom: 12px;
+      overflow-x: auto;
+      overflow-y: visible;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: none;
+      flex-wrap: nowrap;
+    }
+    .tab-bar::-webkit-scrollbar { display: none; }
+    .tab-btn { font-size: 13px; padding: 8px 12px; white-space: nowrap; flex-shrink: 0; }
 
     /* Conflicts */
     .conflicts-wrap { padding: 0 12px 48px; }
