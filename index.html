@@ -505,6 +505,58 @@
   .tab-panel { display: none; }
   .tab-panel.active { display: block; }
 
+  /* ── FREE DATES ── */
+  .freedates-wrap {
+    max-width: 1300px;
+    margin: 0 auto;
+    padding: 0 40px 60px;
+  }
+  .freedates-month {
+    margin-bottom: 28px;
+  }
+  .freedates-month-title {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 28px;
+    letter-spacing: 0.05em;
+    color: var(--ink);
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid var(--line);
+  }
+  .freedates-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .freedate-chip {
+    background: white;
+    border: 1.5px solid var(--line);
+    border-radius: 8px;
+    padding: 8px 14px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    min-width: 80px;
+    transition: border-color 0.15s;
+  }
+  .freedate-chip:hover { border-color: var(--orange); }
+  .freedate-chip.weekend { background: var(--cream); }
+  .freedate-dayname {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+    text-transform: uppercase;
+  }
+  .freedate-num {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 26px;
+    line-height: 1;
+    color: var(--text);
+  }
+  .freedate-chip.weekend .freedate-num { color: var(--muted); }
+
   /* ── CONFLICTS ── */
   .conflicts-wrap {
     max-width: 1300px;
@@ -540,58 +592,49 @@
     gap: 12px;
   }
   .conflict-header-date { font-size: 13px; font-weight: 700; }
-  .conflict-header-gap {
-    font-size: 12px;
-    font-weight: 600;
-    opacity: 0.9;
+  .conflict-header-right { display: flex; align-items: center; gap: 8px; }
+  .conflict-count {
+    font-size: 11px;
+    font-weight: 700;
     background: rgba(255,255,255,0.2);
-    padding: 2px 10px;
+    padding: 2px 8px;
     border-radius: 100px;
   }
   .conflict-body {
-    display: grid;
-    grid-template-columns: 1fr auto 1fr;
-    align-items: center;
-    gap: 0;
+    display: flex;
+    flex-direction: column;
   }
   .conflict-game {
-    padding: 14px 18px;
+    padding: 12px 18px;
+    display: flex;
+    align-items: baseline;
+    gap: 14px;
+    border-bottom: 1px solid var(--line);
   }
+  .conflict-game:last-child { border-bottom: none; }
   .conflict-game-time {
-    font-size: 11px;
-    font-weight: 700;
-    color: var(--orange);
-    margin-bottom: 4px;
-  }
-  .conflict-game-team {
-    font-size: 15px;
+    font-size: 13px;
     font-weight: 800;
+    color: var(--orange);
+    white-space: nowrap;
+    flex-shrink: 0;
+    min-width: 38px;
+  }
+  .conflict-game-info { flex: 1; }
+  .conflict-game-team {
+    font-size: 14px;
+    font-weight: 700;
     color: var(--cool);
-    margin-bottom: 2px;
+    margin-bottom: 1px;
   }
   .conflict-game-vs {
     font-size: 12px;
     color: var(--muted);
-    margin-bottom: 4px;
   }
   .conflict-game-meta {
     font-size: 11px;
     color: var(--muted);
-  }
-  .conflict-game-venue {
-    font-size: 11px;
-    font-weight: 600;
-    color: var(--text);
-    margin-top: 3px;
-  }
-  .conflict-divider {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 0 8px;
-    font-size: 20px;
-    color: var(--line);
-    font-weight: 300;
+    margin-top: 1px;
   }
 
   /* ── FOOTER ── */
@@ -782,9 +825,9 @@
 
     /* Conflicts */
     .conflicts-wrap { padding: 0 12px 48px; }
-    .conflict-body { grid-template-columns: 1fr; grid-template-areas: "a" "div" "b"; }
-    .conflict-divider { display: none; }
-    .conflict-game:first-child { border-bottom: 1px solid var(--line); }
+
+    /* Free dates */
+    .freedates-wrap { padding: 0 12px 48px; }
   }
 </style>
 </head>
@@ -869,6 +912,10 @@
     התנגשויות
     <span class="tab-badge none" id="tab-badge-conflicts">0</span>
   </button>
+  <button class="tab-btn" data-tab="freedates">
+    תאריכים פנויים
+    <span class="tab-badge none" id="tab-badge-freedates">0</span>
+  </button>
 </div>
 
 <!-- TAB 1: SCHEDULE -->
@@ -895,6 +942,11 @@
 <!-- TAB 2: CONFLICTS -->
 <div class="tab-panel" id="panel-conflicts">
   <div class="conflicts-wrap" id="conflicts-body"></div>
+</div>
+
+<!-- TAB 3: FREE DATES -->
+<div class="tab-panel" id="panel-freedates">
+  <div class="freedates-wrap" id="freedates-body"></div>
 </div>
 
 <footer class="report-footer">
@@ -1144,16 +1196,30 @@ function detectConflicts() {
   for (const [day, games] of byDate) {
     if (games.length < 2) continue;
     games.sort((a, b) => a.date.localeCompare(b.date));
-    for (let i = 0; i < games.length; i++) {
-      for (let j = i + 1; j < games.length; j++) {
-        const a = games[i], b = games[j];
-        const diffMin = (new Date(b.date) - new Date(a.date)) / 60000;
-        if (diffMin < 120) {
-          conflicts.push({ day, a, b, diffMin: Math.round(diffMin) });
-        }
-      }
-    }
+
+    // Union-Find: group games that conflict (diff < 120 min) into clusters
+    const parent = games.map((_, i) => i);
+    function find(x) { return parent[x] === x ? x : (parent[x] = find(parent[x])); }
+    function union(x, y) { parent[find(x)] = find(y); }
+
+    for (let i = 0; i < games.length; i++)
+      for (let j = i + 1; j < games.length; j++)
+        if ((new Date(games[j].date) - new Date(games[i].date)) / 60000 < 120)
+          union(i, j);
+
+    // Collect clusters with 2+ members
+    const clusters = new Map();
+    games.forEach((g, i) => {
+      const root = find(i);
+      if (!clusters.has(root)) clusters.set(root, []);
+      clusters.get(root).push(g);
+    });
+
+    for (const cluster of clusters.values())
+      if (cluster.length >= 2)
+        conflicts.push({ day, games: cluster });
   }
+
   conflicts.sort((x, y) => x.day.localeCompare(y.day));
   return conflicts;
 }
@@ -1182,32 +1248,81 @@ function renderConflicts() {
     return;
   }
 
-  container.innerHTML = conflicts.map(({ day, a, b, diffMin }) => {
-    const gapLabel = diffMin === 0 ? 'באותה שעה' : `הפרש ${diffMin} דקות`;
-    const cardClass = 'conflict-card';
-
-    const gameHtml = (m) => `
+  container.innerHTML = conflicts.map(({ day, games }) => {
+    const gamesHtml = games.map(m => `
       <div class="conflict-game">
-        <div class="conflict-game-time">${m.timeLabel}</div>
-        <div class="conflict-game-team">${m.home}</div>
-        <div class="conflict-game-vs">נגד ${m.away}</div>
-        <div class="conflict-game-meta">${m.league}</div>
-        ${m.venue ? `<div class="conflict-game-venue">📍 ${m.venue.split(',')[0]}</div>` : ''}
-      </div>`;
+        <span class="conflict-game-time">${m.timeLabel}</span>
+        <div class="conflict-game-info">
+          <div class="conflict-game-team">${m.home}</div>
+          <div class="conflict-game-vs">נגד ${m.away}</div>
+          <div class="conflict-game-meta">${m.league}</div>
+        </div>
+      </div>`).join('');
 
     return `
-      <div class="${cardClass}">
+      <div class="conflict-card">
         <div class="conflict-header">
           <span class="conflict-header-date">${formatDayLabel(day)}</span>
-          <span class="conflict-header-gap">${gapLabel}</span>
+          <span class="conflict-count">${games.length} משחקי בית</span>
         </div>
-        <div class="conflict-body">
-          ${gameHtml(a)}
-          <div class="conflict-divider">|</div>
-          ${gameHtml(b)}
-        </div>
+        <div class="conflict-body">${gamesHtml}</div>
       </div>`;
   }).join('');
+}
+
+// ── Free dates ────────────────────────────────────────────────────────────────
+
+function renderFreeDates() {
+  const FROM = '2026-04-19';
+  const TO   = '2026-06-20';
+
+  const busyDays = new Set(MATCHES.map(m => m.date.slice(0, 10)));
+
+  // Collect all free days in range
+  const free = [];
+  const cur = new Date(FROM);
+  const end = new Date(TO);
+  while (cur <= end) {
+    const key = cur.toISOString().slice(0, 10);
+    if (!busyDays.has(key)) free.push(new Date(cur));
+    cur.setDate(cur.getDate() + 1);
+  }
+
+  const badge = document.getElementById('tab-badge-freedates');
+  badge.textContent = free.length;
+  badge.classList.toggle('none', free.length === 0);
+
+  const container = document.getElementById('freedates-body');
+  if (free.length === 0) {
+    container.innerHTML = '<div style="text-align:center;padding:60px;color:var(--muted)">אין תאריכים פנויים בטווח זה</div>';
+    return;
+  }
+
+  const dayNames  = ['א׳','ב׳','ג׳','ד׳','ה׳','ו׳','ש׳'];
+  const monthNames = ['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'];
+
+  // Group by month
+  const byMonth = new Map();
+  for (const d of free) {
+    const key = `${d.getFullYear()}-${d.getMonth()}`;
+    if (!byMonth.has(key)) byMonth.set(key, { label: `${monthNames[d.getMonth()]} ${d.getFullYear()}`, days: [] });
+    byMonth.get(key).days.push(d);
+  }
+
+  container.innerHTML = [...byMonth.values()].map(({ label, days }) => `
+    <div class="freedates-month">
+      <div class="freedates-month-title">${label}</div>
+      <div class="freedates-grid">
+        ${days.map(d => {
+          const dow = d.getDay();
+          const isWeekend = dow === 5 || dow === 6;
+          return `<div class="freedate-chip${isWeekend ? ' weekend' : ''}">
+            <span class="freedate-dayname">יום ${dayNames[dow]}</span>
+            <span class="freedate-num">${d.getDate()}</span>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>`).join('');
 }
 
 // ── Tab switching
@@ -1229,6 +1344,7 @@ document.getElementById('total-matches-label').textContent = `${total} משחק�
 document.getElementById('tab-badge-schedule').textContent = total;
 render();
 renderConflicts();
+renderFreeDates();
 </script>
 </body>
 </html>
