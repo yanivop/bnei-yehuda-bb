@@ -689,6 +689,15 @@ function buildHtml(matches) {
     color: var(--text);
   }
   .freedate-chip.weekend .freedate-num { color: var(--muted); }
+  .freedate-chip.noted { border-color: var(--amber); background: #fffbf0; }
+  .freedate-note {
+    font-size: 9px;
+    font-weight: 700;
+    color: var(--amber);
+    text-align: center;
+    line-height: 1.2;
+    max-width: 72px;
+  }
 
   /* ── CONFLICTS ── */
   .conflicts-wrap {
@@ -1418,15 +1427,28 @@ function renderFreeDates() {
   const FROM = '2026-04-19';
   const TO   = '2026-06-20';
 
+  // Dates excluded from the free list (holidays)
+  const HOLIDAYS_EXCLUDE = new Set([
+    '2026-04-21', // יום הזיכרון
+    '2026-04-22', // יום העצמאות
+    '2026-05-21', // ערב שבועות
+    '2026-05-22', // שבועות
+  ]);
+
+  // Dates kept as free but with a note label
+  const HOLIDAYS_NOTE = {
+    '2026-05-04': 'ערב ל״ג בעומר',
+  };
+
   const busyDays = new Set(MATCHES.map(m => m.date.slice(0, 10)));
 
-  // Collect all free days in range
+  // Collect all free days in range (excluding holidays and match days)
   const free = [];
   const cur = new Date(FROM);
   const end = new Date(TO);
   while (cur <= end) {
     const key = cur.toISOString().slice(0, 10);
-    if (!busyDays.has(key)) free.push(new Date(cur));
+    if (!busyDays.has(key) && !HOLIDAYS_EXCLUDE.has(key)) free.push(new Date(cur));
     cur.setDate(cur.getDate() + 1);
   }
 
@@ -1457,10 +1479,13 @@ function renderFreeDates() {
       <div class="freedates-grid">
         \${days.map(d => {
           const dow = d.getDay();
+          const key = d.toISOString().slice(0, 10);
           const isWeekend = dow === 5 || dow === 6;
-          return \`<div class="freedate-chip\${isWeekend ? ' weekend' : ''}">
+          const note = HOLIDAYS_NOTE[key] || null;
+          return \`<div class="freedate-chip\${isWeekend ? ' weekend' : ''}\${note ? ' noted' : ''}">
             <span class="freedate-dayname">יום \${dayNames[dow]}</span>
             <span class="freedate-num">\${d.getDate()}</span>
+            \${note ? \`<span class="freedate-note">\${note}</span>\` : ''}
           </div>\`;
         }).join('')}
       </div>
