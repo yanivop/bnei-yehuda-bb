@@ -1568,7 +1568,7 @@ function renderFreeDates() {
           ].filter(Boolean).join(' ');
 
           const slotsHtml = slots.length
-            ? \`<div class="freedate-slots">\${slots.map(s => \`<span class="freedate-slot">\${s}</span>\`).join('')}</div>\`
+            ? \`<div class="freedate-slots">\${slots.map(s => \`<span class="freedate-slot">פנוי \${s}</span>\`).join('')}</div>\`
             : '';
           const badgeHtml = hasMatch
             ? \`<span class="freedate-match-badge">\${existingCount} משחק</span>\`
