@@ -532,22 +532,23 @@
     background: white;
     border: 1.5px solid var(--line);
     border-radius: 8px;
-    padding: 8px 14px;
+    padding: 8px 14px 10px;
     display: flex;
     flex-direction: column;
     align-items: center;
     gap: 2px;
-    min-width: 80px;
+    min-width: 86px;
+    position: relative;
     transition: border-color 0.15s;
   }
   .freedate-chip:hover { border-color: var(--orange); }
   .freedate-chip.weekend { background: var(--cream); }
+  .freedate-chip.has-match { border-color: var(--amber); background: #fffbf0; }
   .freedate-dayname {
     font-size: 10px;
     font-weight: 700;
     letter-spacing: 0.08em;
     color: var(--muted);
-    text-transform: uppercase;
   }
   .freedate-num {
     font-family: 'Bebas Neue', sans-serif;
@@ -556,6 +557,38 @@
     color: var(--text);
   }
   .freedate-chip.weekend .freedate-num { color: var(--muted); }
+  /* slots row */
+  .freedate-slots {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+    justify-content: center;
+    margin-top: 4px;
+  }
+  .freedate-slot {
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--cool);
+    background: rgba(2,62,138,0.08);
+    border-radius: 4px;
+    padding: 1px 5px;
+    white-space: nowrap;
+  }
+  /* existing-match badge (top-left corner) */
+  .freedate-match-badge {
+    position: absolute;
+    top: -7px;
+    left: -7px;
+    background: var(--amber);
+    color: white;
+    font-size: 9px;
+    font-weight: 800;
+    border-radius: 100px;
+    padding: 1px 5px;
+    white-space: nowrap;
+    line-height: 1.5;
+  }
+  /* holiday note */
   .freedate-chip.noted { border-color: var(--amber); background: #fffbf0; }
   .freedate-note {
     font-size: 9px;
@@ -563,7 +596,8 @@
     color: var(--amber);
     text-align: center;
     line-height: 1.2;
-    max-width: 72px;
+    max-width: 80px;
+    margin-top: 3px;
   }
 
   /* ── CONFLICTS ── */
@@ -1290,69 +1324,132 @@ function renderConflicts() {
 
 // ── Free dates ────────────────────────────────────────────────────────────────
 
+function timeToMin(t) {
+  const [h, m] = t.split(':').map(Number);
+  return h * 60 + m;
+}
+function minToTime(min) {
+  return String(Math.floor(min / 60)).padStart(2, '0') + ':' + String(min % 60).padStart(2, '0');
+}
+
+// Returns null (day not available) or { existingCount, slots[] }
+function analyzeDay(dateStr) {
+  const dow = new Date(dateStr).getDay(); // 0=Sun,1=Mon,2=Tue,3=Wed,4=Thu,5=Fri,6=Sat
+  const homeMatches = MATCHES.filter(m => m.date.slice(0, 10) === dateStr && isOurs(m.home));
+  const homeTimes = homeMatches.map(m => timeToMin(m.timeLabel)).sort((a, b) => a - b);
+  const n = homeMatches.length;
+
+  if (dow === 5) { // שישי — 2 סלוטים: עד 15:00, הפרש שעתיים
+    if (n >= 2) return null;
+    if (n === 0) return { existingCount: 0, slots: ['13:00', '15:00'] };
+    const t = homeTimes[0];
+    const slots = [];
+    if (t + 120 <= 900) slots.push(minToTime(t + 120));              // אחרי
+    if (t - 120 >= 720 && t - 120 <= 900) slots.push(minToTime(t - 120)); // לפני (לא לפני 12:00)
+    return slots.length ? { existingCount: 1, slots } : null;
+  }
+
+  if (dow === 1 || dow === 4) { // שני/חמישי — אימון 19:00-21:00, סלוט 17:30
+    const SLOT = 17 * 60 + 30;
+    const conflict = homeTimes.some(t => Math.abs(t - SLOT) < 120);
+    if (conflict) return null;
+    return { existingCount: n, slots: ['17:30'] };
+  }
+
+  if (dow === 3) { // רביעי
+    if (n === 0) return { existingCount: 0, slots: [] };
+    if (n === 1) {
+      const t = homeTimes[0];
+      const slots = [];
+      if (t + 120 <= 21 * 60) slots.push(minToTime(t + 120));
+      if (t - 120 >= 17 * 60) slots.push(minToTime(t - 120));
+      return slots.length ? { existingCount: 1, slots } : null;
+    }
+    return null;
+  }
+
+  // ראשון, שלישי, שבת — רק אם פנוי לחלוטין
+  return n === 0 ? { existingCount: 0, slots: [] } : null;
+}
+
 function renderFreeDates() {
   const FROM = '2026-04-19';
   const TO   = '2026-06-20';
 
-  // Dates excluded from the free list (holidays)
   const HOLIDAYS_EXCLUDE = new Set([
     '2026-04-21', // יום הזיכרון
     '2026-04-22', // יום העצמאות
     '2026-05-21', // ערב שבועות
     '2026-05-22', // שבועות
   ]);
+  const HOLIDAYS_NOTE = { '2026-05-04': 'ערב ל״ג בעומר' };
 
-  // Dates kept as free but with a note label
-  const HOLIDAYS_NOTE = {
-    '2026-05-04': 'ערב ל״ג בעומר',
-  };
-
-  const busyDays = new Set(MATCHES.map(m => m.date.slice(0, 10)));
-
-  // Collect all free days in range (excluding holidays and match days)
-  const free = [];
+  // Collect days with available capacity
+  const available = [];
   const cur = new Date(FROM);
   const end = new Date(TO);
   while (cur <= end) {
     const key = cur.toISOString().slice(0, 10);
-    if (!busyDays.has(key) && !HOLIDAYS_EXCLUDE.has(key)) free.push(new Date(cur));
+    if (!HOLIDAYS_EXCLUDE.has(key)) {
+      const result = analyzeDay(key);
+      if (result) available.push({ date: new Date(cur), key, ...result });
+    }
     cur.setDate(cur.getDate() + 1);
   }
 
   const badge = document.getElementById('tab-badge-freedates');
-  badge.textContent = free.length;
-  badge.classList.toggle('none', free.length === 0);
+  badge.textContent = available.length;
+  badge.classList.toggle('none', available.length === 0);
 
   const container = document.getElementById('freedates-body');
-  if (free.length === 0) {
+  if (available.length === 0) {
     container.innerHTML = '<div style="text-align:center;padding:60px;color:var(--muted)">אין תאריכים פנויים בטווח זה</div>';
     return;
   }
 
-  const dayNames  = ['א׳','ב׳','ג׳','ד׳','ה׳','ו׳','ש׳'];
+  const dayNames   = ['א׳','ב׳','ג׳','ד׳','ה׳','ו׳','ש׳'];
   const monthNames = ['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'];
 
   // Group by month
   const byMonth = new Map();
-  for (const d of free) {
-    const key = `${d.getFullYear()}-${d.getMonth()}`;
-    if (!byMonth.has(key)) byMonth.set(key, { label: `${monthNames[d.getMonth()]} ${d.getFullYear()}`, days: [] });
-    byMonth.get(key).days.push(d);
+  for (const item of available) {
+    const mk = `${item.date.getFullYear()}-${item.date.getMonth()}`;
+    if (!byMonth.has(mk)) byMonth.set(mk, { label: `${monthNames[item.date.getMonth()]} ${item.date.getFullYear()}`, items: [] });
+    byMonth.get(mk).items.push(item);
   }
 
-  container.innerHTML = [...byMonth.values()].map(({ label, days }) => `
+  container.innerHTML = [...byMonth.values()].map(({ label, items }) => `
     <div class="freedates-month">
       <div class="freedates-month-title">${label}</div>
       <div class="freedates-grid">
-        ${days.map(d => {
+        ${items.map(({ date: d, key, existingCount, slots }) => {
           const dow = d.getDay();
-          const key = d.toISOString().slice(0, 10);
           const isWeekend = dow === 5 || dow === 6;
-          const note = HOLIDAYS_NOTE[key] || null;
-          return `<div class="freedate-chip${isWeekend ? ' weekend' : ''}${note ? ' noted' : ''}">
+          const hasMatch = existingCount > 0;
+          const holidayNote = HOLIDAYS_NOTE[key] || null;
+          const classes = [
+            'freedate-chip',
+            isWeekend ? 'weekend' : '',
+            hasMatch  ? 'has-match' : '',
+            holidayNote ? 'noted' : '',
+          ].filter(Boolean).join(' ');
+
+          const slotsHtml = slots.length
+            ? `<div class="freedate-slots">${slots.map(s => `<span class="freedate-slot">${s}</span>`).join('')}</div>`
+            : '';
+          const badgeHtml = hasMatch
+            ? `<span class="freedate-match-badge">${existingCount} משחק</span>`
+            : '';
+          const noteHtml = holidayNote
+            ? `<span class="freedate-note">${holidayNote}</span>`
+            : '';
+
+          return `<div class="${classes}">
+            ${badgeHtml}
             <span class="freedate-dayname">יום ${dayNames[dow]}</span>
             <span class="freedate-num">${d.getDate()}</span>
-            ${note ? `<span class="freedate-note">${note}</span>` : ''}
+            ${slotsHtml}
+            ${noteHtml}
           </div>`;
         }).join('')}
       </div>
