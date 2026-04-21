@@ -1008,6 +1008,7 @@ function buildHtml(matches) {
 
   /* ── MOBILE ──────────────────────────────────────────────── */
   @media (max-width: 640px) {
+    .gmail-btn { display: none; }
 
     /* Masthead */
     .masthead-inner {
