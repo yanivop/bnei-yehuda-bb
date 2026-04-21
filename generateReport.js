@@ -24,6 +24,19 @@ const EXCLUDED_LEAGUES = new Set([
 // Leagues excluded only from conflict detection (still shown in main schedule)
 const CONFLICTS_EXCLUDED_PREFIXES = ["קט סל"];
 
+// ─── Config: games available in the transportation request form dropdown ───────
+// Update this list whenever the Google Form is updated.
+// Format: "[league] | [home team] - [away team]"  (exactly as it appears in the form)
+const TRANSPORT_FORM_OPTIONS = new Set([
+  "נערים ב תל אביב | הפועל ת\"א/אוסישקין - בני יהודה תל אביב",
+  "נערות א לאומית עליון | הפועל עראבה - בני יהודה תל אביב",
+  "קט סל א גוש דן | הפועל תל אביב דרום - בני יהודה תל אביב",
+  "ילדות ב תל אביב | מכבי רמת גן עירוני - בני יהודה ת\"א",
+  "ב תל אביב | הפועל יפו - בני יהודה ת״א שושני",
+  "נערות א לאומית עליון | הפועל אשקלון - בני יהודה תל אביב",
+  "ילדים ב תל אביב | מכבי תל אביב צפון - בני יהודה תל אביב",
+]);
+
 // ─── API ──────────────────────────────────────────────────────────────────────
 
 async function apiFetch(endpoint, params = {}) {
@@ -85,24 +98,28 @@ function normalizeEvent(raw) {
   const hp = raw.home?.points;
   const ap = raw.away?.points;
   const hasScore = hp !== null && ap !== null && hp !== undefined && ap !== undefined;
+  const home = decodeHtml(raw.home?.team) || "—";
+  const away = decodeHtml(raw.away?.team) || "—";
+  const league = (decodeHtml(raw.league?.name) || "—").replace(/["'״׳]/g, "");
   return {
     id: raw.id,
     date: raw.date,
     dateLabel: formatDateHebrew(raw.date),
     timeLabel: raw.date.slice(11, 16),
     status: raw.status,
-    home: decodeHtml(raw.home?.team) || "—",
-    away: decodeHtml(raw.away?.team) || "—",
+    home,
+    away,
     homeLink: raw.home?.link || null,
     awayLink: raw.away?.link || null,
     score: hasScore ? `${hp}–${ap}` : null,
     homePoints: hasScore ? hp : null,
     awayPoints: hasScore ? ap : null,
     winner: raw.winner || null,
-    league: (decodeHtml(raw.league?.name) || "—").replace(/["'״׳]/g, ""),
+    league,
     gender: raw.league?.gender || null,
     venue: (raw.venues || []).map(id => venueCache.get(id)).filter(Boolean)[0] || null,
     matchUrl: raw.link || null,
+    hasTransport: TRANSPORT_FORM_OPTIONS.has(`${league} | ${home} - ${away}`),
   };
 }
 
@@ -470,6 +487,38 @@ function buildHtml(matches) {
   }
   th.col-score { text-align: center; }
   th.col-venue { color: rgba(245,240,232,0.4); }
+  th.col-link, td.col-link { width: 32px; text-align: center; padding: 0 6px; }
+  .match-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border-radius: 6px;
+    font-size: 13px;
+    color: var(--muted);
+    text-decoration: none;
+    transition: background 0.12s, color 0.12s;
+  }
+  .match-link:hover { background: var(--orange); color: #fff; }
+
+  .transport-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-top: 5px;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--orange);
+    background: rgba(232,93,4,0.08);
+    text-decoration: none;
+    border: 1px solid rgba(232,93,4,0.25);
+    white-space: nowrap;
+    transition: background 0.12s, color 0.12s;
+  }
+  .transport-btn:hover { background: var(--orange); color: #fff; border-color: var(--orange); }
 
   tbody tr {
     border-bottom: 1px solid var(--line);
@@ -814,6 +863,119 @@ function buildHtml(matches) {
     color: var(--muted);
     margin-top: 1px;
   }
+  .email-btn {
+    margin-top: 7px;
+    padding: 4px 10px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--blue, #2563eb);
+    background: transparent;
+    border: 1.5px solid var(--blue, #2563eb);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+  }
+  .email-btn:hover { background: var(--blue, #2563eb); color: #fff; }
+
+  /* ── EMAIL MODAL ── */
+  .email-modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.45);
+    z-index: 1000;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+  }
+  .email-modal {
+    background: #fff;
+    border-radius: 14px;
+    max-width: 540px;
+    width: 100%;
+    direction: rtl;
+    box-shadow: 0 8px 40px rgba(0,0,0,0.22);
+    overflow: hidden;
+  }
+  .email-modal-header {
+    background: var(--orange);
+    color: #fff;
+    padding: 12px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 14px;
+    font-weight: 700;
+  }
+  .email-modal-header button {
+    background: rgba(255,255,255,0.2);
+    border: none;
+    color: #fff;
+    font-size: 16px;
+    cursor: pointer;
+    border-radius: 6px;
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .email-modal-body { padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+  .email-modal-match-info {
+    background: #f5f5f7;
+    border-radius: 8px;
+    padding: 8px 12px;
+    font-size: 12px;
+    color: var(--cool);
+    font-weight: 600;
+    line-height: 1.5;
+  }
+  .email-modal-fields {
+    display: flex;
+    gap: 12px;
+  }
+  .email-modal-fields > div { flex: 1; display: flex; flex-direction: column; gap: 4px; }
+  .email-modal-fields label { font-size: 11px; font-weight: 700; color: var(--muted); }
+  .email-modal-fields input {
+    padding: 6px 10px;
+    border: 1.5px solid var(--line);
+    border-radius: 8px;
+    font-size: 13px;
+    outline: none;
+    direction: ltr;
+  }
+  .email-modal-fields input:focus { border-color: var(--orange); }
+  .email-output-block { display: flex; flex-direction: column; gap: 4px; }
+  .email-output-block label { font-size: 11px; font-weight: 700; color: var(--muted); }
+  .email-output-block > div { display: flex; gap: 8px; align-items: flex-start; }
+  .email-output-block textarea {
+    flex: 1;
+    padding: 8px 10px;
+    border: 1.5px solid var(--line);
+    border-radius: 8px;
+    font-size: 13px;
+    font-family: inherit;
+    resize: none;
+    direction: rtl;
+    background: #fafafa;
+    color: var(--cool);
+    line-height: 1.6;
+  }
+  .copy-btn {
+    padding: 6px 10px;
+    background: #16a34a;
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 0.15s;
+    align-self: flex-start;
+  }
+  .copy-btn:hover { background: #15803d; }
+  .copy-btn.copied { background: #64748b; }
 
   /* ── FOOTER ── */
   .report-footer {
@@ -1118,6 +1280,7 @@ function buildHtml(matches) {
             <th class="col-away">קבוצת אורח</th>
             <th class="col-league">ליגה</th>
             <th class="col-venue">אולם</th>
+            <th class="col-link"></th>
           </tr>
         </thead>
         <tbody id="matches-body"></tbody>
@@ -1164,6 +1327,17 @@ function getOurTeam(match) {
 
 function isHome(match) {
   return isOurs(match.home);
+}
+
+function buildTransportUrl(m) {
+  const formBase = 'https://docs.google.com/forms/d/e/1FAIpQLSevfSSIgFn3X82Ggj0qOZXNj-LnCUvuUu0RG0EgO6UwYga2Qw/viewform';
+  const gameOption = encodeURIComponent(\`\${m.league} | \${m.home} - \${m.away}\`);
+  const [h, min] = m.timeLabel.split(':').map(Number);
+  const depMins = h * 60 + min - 90;
+  const depH = Math.floor(depMins / 60);
+  const depMin = depMins % 60;
+  const depTime = encodeURIComponent(\`\${String(depH).padStart(2,'0')}:\${String(depMin).padStart(2,'0')}\`);
+  return \`\${formBase}?usp=pp_url&entry.387102172=\${gameOption}&entry.1196097229=\${depTime}\`;
 }
 
 // ── Build team+league checkboxes
@@ -1285,7 +1459,7 @@ function render() {
   document.getElementById('results-count').textContent = list.length;
 
   if (list.length === 0) {
-    tbody.innerHTML = \`<tr><td colspan="6">
+    tbody.innerHTML = \`<tr><td colspan="7">
       <div class="empty-state">
         <div class="empty-icon">🏀</div>
         <p>לא נמצאו משחקים התואמים את הסינון</p>
@@ -1315,7 +1489,7 @@ function render() {
         const months = ['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'];
         groupLabel = \`יום \${days[d.getDay()]}, \${d.getDate()} ב\${months[d.getMonth()]} \${d.getFullYear()}\`;
       }
-      html += \`<tr class="date-group-header"><td colspan="6">\${groupLabel}</td></tr>\`;
+      html += \`<tr class="date-group-header"><td colspan="7">\${groupLabel}</td></tr>\`;
       lastGroupKey = groupKey;
     }
 
@@ -1355,8 +1529,10 @@ function render() {
       <td class="cell-league col-league">
         \${genderDot}\${m.league}
         \${venue !== '—' ? \`<span class="venue-inline"> · 📍 \${venue}</span>\` : ''}
+        \${!ourTeamIsHome && m.hasTransport ? \`<br><a href="\${buildTransportUrl(m)}" target="_blank" class="transport-btn">🚌 הזמן הסעה</a>\` : ''}
       </td>
       <td class="cell-venue col-venue">\${venue}</td>
+      <td class="cell-link col-link">\${m.matchUrl ? \`<a href="\${m.matchUrl}" target="_blank" class="match-link" title="עמוד המשחק">↗</a>\` : ''}</td>
     </tr>\`;
   });
 
@@ -1443,6 +1619,7 @@ function renderConflicts() {
           <div class="conflict-game-team">\${m.home}</div>
           <div class="conflict-game-vs">נגד \${m.away}</div>
           <div class="conflict-game-meta">\${m.league}</div>
+          <button class="email-btn" onclick='openEmailModal(\${JSON.stringify(m).replace(/'/g, "&#39;")})'>✉ צור מייל לשינוי</button>
         </div>
       </div>\`).join('');
 
@@ -1604,6 +1781,83 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
   });
 });
 
+// ── Email modal helpers
+function extractId(url) {
+  if (!url) return '';
+  const match = url.match(/[/]([0-9]+)/);
+  return match ? match[1] : '';
+}
+
+function formatDateShort(iso) {
+  const d = new Date(iso);
+  const yy = String(d.getFullYear()).slice(-2);
+  return \`\${d.getDate()}/\${d.getMonth() + 1}/\${yy}\`;
+}
+
+let _emailMatch = null;
+
+function openEmailModal(match) {
+  _emailMatch = match;
+  document.getElementById('email-match-summary').textContent =
+    \`\${match.home} נגד \${match.away} | \${match.league} | \${match.dateLabel} \${match.timeLabel}\`;
+  document.getElementById('email-new-date').value = '';
+  document.getElementById('email-new-time').value = '';
+  document.getElementById('email-subject').value = '';
+  document.getElementById('email-body').value = '';
+  document.getElementById('email-overlay').style.display = 'flex';
+  document.addEventListener('keydown', _escHandler);
+}
+
+function closeEmailModal() {
+  document.getElementById('email-overlay').style.display = 'none';
+  document.removeEventListener('keydown', _escHandler);
+}
+
+function _escHandler(e) { if (e.key === 'Escape') closeEmailModal(); }
+
+function refreshEmail() {
+  const m = _emailMatch;
+  if (!m) return;
+  const newDate = document.getElementById('email-new-date').value;
+  const newTime = document.getElementById('email-new-time').value;
+  if (!newDate || !newTime) return;
+
+  const matchId = extractId(m.matchUrl);
+  const homeId  = extractId(m.homeLink);
+  const awayId  = extractId(m.awayLink);
+  const origDate = formatDateShort(m.date);
+  const nd = new Date(newDate);
+  const newDateStr = \`\${nd.getDate()}/\${nd.getMonth() + 1}/\${String(nd.getFullYear()).slice(-2)}\`;
+
+  document.getElementById('email-subject').value =
+    \`שינוי משחק - \${m.league}\`;
+
+  document.getElementById('email-body').value =
+\`שלום,
+בהסכמת שני המאמנים מבקשים להזיז את המשחק מתאריך \${origDate}
+לתאריך \${newDateStr} בשעה \${newTime}
+
+\${m.home} \${homeId}
+נגד
+\${m.away} \${awayId}
+
+אנא אשרו את הבקשה.
+
+תודה רבה\`;
+}
+
+function copyField(id) {
+  const el = document.getElementById(id);
+  navigator.clipboard.writeText(el.value).then(() => {
+    const btn = el.parentElement.querySelector('.copy-btn');
+    if (!btn) return;
+    const orig = btn.textContent;
+    btn.textContent = '✓ הועתק';
+    btn.classList.add('copied');
+    setTimeout(() => { btn.textContent = orig; btn.classList.remove('copied'); }, 1800);
+  });
+}
+
 // ── Init
 const total = MATCHES.length;
 document.getElementById('total-matches-label').textContent = \`\${total} משחקים עד סוף העונה\`;
@@ -1612,6 +1866,42 @@ render();
 renderConflicts();
 renderFreeDates();
 </script>
+
+<div class="email-modal-overlay" id="email-overlay" onclick="closeEmailModal()">
+  <div class="email-modal" onclick="event.stopPropagation()">
+    <div class="email-modal-header">
+      <span>יצירת מייל לשינוי משחק</span>
+      <button onclick="closeEmailModal()">✕</button>
+    </div>
+    <div class="email-modal-body">
+      <div id="email-match-summary" class="email-modal-match-info"></div>
+      <div class="email-modal-fields">
+        <div>
+          <label>תאריך חדש</label>
+          <input type="date" id="email-new-date" oninput="refreshEmail()">
+        </div>
+        <div>
+          <label>שעה חדשה</label>
+          <input type="time" id="email-new-time" oninput="refreshEmail()">
+        </div>
+      </div>
+      <div class="email-output-block">
+        <label>כותרת</label>
+        <div>
+          <textarea id="email-subject" rows="2" readonly></textarea>
+          <button class="copy-btn" onclick="copyField('email-subject')">העתק</button>
+        </div>
+      </div>
+      <div class="email-output-block">
+        <label>תוכן</label>
+        <div>
+          <textarea id="email-body" rows="9" readonly></textarea>
+          <button class="copy-btn" onclick="copyField('email-body')">העתק</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
 </body>
 </html>`;
 }
