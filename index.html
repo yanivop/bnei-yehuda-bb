@@ -1162,7 +1162,7 @@
 </div>
 
 <footer class="report-footer">
-  <div>נוצר ב־21 באפריל 2026, 15:39</div>
+  <div>נוצר ב־21 באפריל 2026, 15:46</div>
   <div>מקור: ibasketball.co.il</div>
 </footer>
 
@@ -1724,8 +1724,40 @@ function openGmail() {
   const subject = document.getElementById('email-subject').value;
   const body = document.getElementById('email-body').value;
   if (!subject && !body) return;
-  const url = 'https://mail.google.com/mail/?view=cm&su=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(body);
-  window.open(url, '_blank');
+
+  const su = encodeURIComponent(subject);
+  const bd = encodeURIComponent(body);
+  const webUrl = 'https://mail.google.com/mail/?view=cm&su=' + su + '&body=' + bd;
+
+  const ua = navigator.userAgent;
+  const isIOS = /iPhone|iPad|iPod/i.test(ua);
+  const isAndroid = /Android/i.test(ua);
+
+  if (isIOS) {
+    const appUrl = 'googlegmail:///co?subject=' + su + '&body=' + bd;
+    _tryAppOrWeb(appUrl, webUrl);
+  } else if (isAndroid) {
+    const intentUrl = 'intent:#Intent;action=android.intent.action.SEND;type=text/plain' +
+      ';S.android.intent.extra.SUBJECT=' + su +
+      ';S.android.intent.extra.TEXT=' + bd +
+      ';package=com.google.android.gm;end';
+    _tryAppOrWeb(intentUrl, webUrl);
+  } else {
+    window.open(webUrl, '_blank');
+  }
+}
+
+function _tryAppOrWeb(appUrl, webUrl) {
+  // If the app opens, the page becomes hidden — cancel the web fallback
+  let fallbackTimer = setTimeout(() => { window.location.href = webUrl; }, 1500);
+  function onHidden() {
+    if (document.hidden) {
+      clearTimeout(fallbackTimer);
+      document.removeEventListener('visibilitychange', onHidden);
+    }
+  }
+  document.addEventListener('visibilitychange', onHidden);
+  window.location.href = appUrl;
 }
 
 // ── Init
