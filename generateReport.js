@@ -976,6 +976,20 @@ function buildHtml(matches) {
   }
   .copy-btn:hover { background: #15803d; }
   .copy-btn.copied { background: #64748b; }
+  .gmail-btn {
+    width: 100%;
+    padding: 10px;
+    background: #1a73e8;
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .gmail-btn:hover { background: #1558b0; }
+  .gmail-btn:disabled { background: #94a3b8; cursor: default; }
 
   /* ── FOOTER ── */
   .report-footer {
@@ -1858,6 +1872,14 @@ function copyField(id) {
   });
 }
 
+function openGmail() {
+  const subject = document.getElementById('email-subject').value;
+  const body = document.getElementById('email-body').value;
+  if (!subject && !body) return;
+  const url = 'https://mail.google.com/mail/?view=cm&su=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(body);
+  window.open(url, '_blank');
+}
+
 // ── Init
 const total = MATCHES.length;
 document.getElementById('total-matches-label').textContent = \`\${total} משחקים עד סוף העונה\`;
@@ -1899,6 +1921,7 @@ renderFreeDates();
           <button class="copy-btn" onclick="copyField('email-body')">העתק</button>
         </div>
       </div>
+      <button class="gmail-btn" onclick="openGmail()">✉ שלח ב-Gmail</button>
     </div>
   </div>
 </div>
