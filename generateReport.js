@@ -1885,31 +1885,27 @@ function openGmail() {
   const isIOS = /iPhone|iPad|iPod/i.test(ua);
   const isAndroid = /Android/i.test(ua);
 
-  if (isIOS) {
+  if (isAndroid) {
+    // Intent URL: Chrome opens Gmail app if installed, falls back to web automatically
+    const fallback = encodeURIComponent(webUrl);
+    const intentUrl = 'intent://co?subject=' + su + '&body=' + bd +
+      '#Intent;scheme=googlegmail;package=com.google.android.gm' +
+      ';S.browser_fallback_url=' + fallback + ';end';
+    window.location.href = intentUrl;
+  } else if (isIOS) {
+    // Try Gmail app scheme, fall back to web after 1.5s if app not installed
     const appUrl = 'googlegmail:///co?subject=' + su + '&body=' + bd;
-    _tryAppOrWeb(appUrl, webUrl);
-  } else if (isAndroid) {
-    const intentUrl = 'intent:#Intent;action=android.intent.action.SEND;type=text/plain' +
-      ';S.android.intent.extra.SUBJECT=' + su +
-      ';S.android.intent.extra.TEXT=' + bd +
-      ';package=com.google.android.gm;end';
-    _tryAppOrWeb(intentUrl, webUrl);
+    let fallbackTimer = setTimeout(() => { window.location.href = webUrl; }, 1500);
+    document.addEventListener('visibilitychange', function onHidden() {
+      if (document.hidden) {
+        clearTimeout(fallbackTimer);
+        document.removeEventListener('visibilitychange', onHidden);
+      }
+    });
+    window.location.href = appUrl;
   } else {
     window.open(webUrl, '_blank');
   }
-}
-
-function _tryAppOrWeb(appUrl, webUrl) {
-  // If the app opens, the page becomes hidden — cancel the web fallback
-  let fallbackTimer = setTimeout(() => { window.location.href = webUrl; }, 1500);
-  function onHidden() {
-    if (document.hidden) {
-      clearTimeout(fallbackTimer);
-      document.removeEventListener('visibilitychange', onHidden);
-    }
-  }
-  document.addEventListener('visibilitychange', onHidden);
-  window.location.href = appUrl;
 }
 
 // ── Init
