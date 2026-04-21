@@ -129,7 +129,9 @@ function buildHtml(matches) {
 
   const jsonData = JSON.stringify(matches);
   const jsonTeams = JSON.stringify(ourTeams);
-  const genDate = new Date().toLocaleDateString("he-IL", { day:"numeric", month:"long", year:"numeric" });
+  const _now = new Date();
+  const genDate = _now.toLocaleDateString("he-IL", { day:"numeric", month:"long", year:"numeric", timeZone:"Asia/Jerusalem" });
+  const genTime = _now.toLocaleTimeString("he-IL", { hour:"2-digit", minute:"2-digit", hour12:false, timeZone:"Asia/Jerusalem" });
 
   return `<!DOCTYPE html>
 <html lang="he" dir="rtl">
@@ -1135,7 +1137,7 @@ function buildHtml(matches) {
 </div>
 
 <footer class="report-footer">
-  <div>נוצר ב־${genDate}</div>
+  <div>נוצר ב־${genDate}, ${genTime}</div>
   <div>מקור: ibasketball.co.il</div>
 </footer>
 

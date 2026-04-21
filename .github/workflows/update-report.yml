@@ -2,8 +2,8 @@ name: Update Match Report
 
 on:
   schedule:
-    # Runs every day at 06:00 Israel time (03:00 UTC)
-    - cron: "10 3,9,12 * * *"  
+    # Every 2 hours 06:10–16:10 Israel time (IDT = UTC+3): 03,05,07,09,11,13 UTC
+    - cron: "10 3,5,7,9,11,13 * * *"
   workflow_dispatch: # allow manual trigger from GitHub UI
 
 jobs:
