@@ -28,7 +28,10 @@ const CONFLICTS_EXCLUDED_PREFIXES = ["קט סל"];
 // Update this list whenever the Google Form is updated.
 // Format: "[league] | [home team] - [away team]"  (exactly as it appears in the form)
 const TRANSPORT_FORM_OPTIONS = new Set([
-  "ילדים ב תל אביב | מכבי תל אביב מזרח - בני יהודה תל אביב",
+  "קט סל א בנות תל אביב | הפועל תל אביב דרום - בני יהודה ת\"א",
+  "נערים ב תל אביב | מכבי רמת גן דרום - בני יהודה תל אביב",
+  "קט סל ב רמת השרון | א.ס. רמת השרון כוכבים - בני יהודה תל אביב",
+  "ילדים א תל אביב | הפועל תל אביב מרכז - בני יהודה תל אביב",
 ]);
 
 // ─── API ──────────────────────────────────────────────────────────────────────
