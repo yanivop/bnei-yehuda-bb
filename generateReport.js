@@ -28,7 +28,7 @@ const CONFLICTS_EXCLUDED_PREFIXES = ["קט סל"];
 // Update this list whenever the Google Form is updated.
 // Format: "[league] | [home team] - [away team]"  (exactly as it appears in the form)
 const TRANSPORT_FORM_OPTIONS = new Set([
-  "נערות א לאומית עליון | בנות פתח תקווה - בני יהודה תל אביב",
+  "אין משחקים רלוונטיים לשבוע הקרוב",
 ]);
 
 // ─── API ──────────────────────────────────────────────────────────────────────
