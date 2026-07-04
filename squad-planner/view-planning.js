@@ -96,6 +96,23 @@ export function renderPlanningView(container) {
 
         row.appendChild(select1);
         row.appendChild(select2);
+
+        if (!player.manual) {
+          const hideBtn = document.createElement("button");
+          hideBtn.textContent = "הסתר (עזב/טעות)";
+          hideBtn.addEventListener("click", async () => {
+            try {
+              await store.savePlayerOverride(player.id, { hidden: true });
+              state.overrides[player.id] = { ...(state.overrides[player.id] || {}), hidden: true };
+              renderPlanningView(container);
+            } catch (err) {
+              console.error(`Failed to hide player ${player.id}:`, err);
+              alert("שגיאה בהסתרת השחקן. נסה שוב.");
+            }
+          });
+          row.appendChild(hideBtn);
+        }
+
         section.appendChild(row);
       }
 
