@@ -56,14 +56,25 @@ export function renderPlanningView(container) {
         const currentAssignment = state.assignments[player.id]?.teamIds || [];
         // Two independent selects so a player can be assigned to up to 2 teams
         // at once (dual registration — happens occasionally, per the spec).
-        const optionsHtml = (selected) =>
-          `<option value="">— לא משובץ —</option>` +
-          teamOptions.map((t) => `<option value="${t.id}" ${t.id === selected ? "selected" : ""}>${t.label}</option>`).join("");
+        const buildTeamOptions = (select, teamOptions, selectedId) => {
+          const placeholder = document.createElement("option");
+          placeholder.value = "";
+          placeholder.textContent = "— לא משובץ —";
+          select.appendChild(placeholder);
+
+          for (const t of teamOptions) {
+            const option = document.createElement("option");
+            option.value = t.id;
+            option.textContent = t.label;
+            option.selected = t.id === selectedId;
+            select.appendChild(option);
+          }
+        };
 
         const select1 = document.createElement("select");
-        select1.innerHTML = optionsHtml(currentAssignment[0] || "");
+        buildTeamOptions(select1, teamOptions, currentAssignment[0] || "");
         const select2 = document.createElement("select");
-        select2.innerHTML = optionsHtml(currentAssignment[1] || "");
+        buildTeamOptions(select2, teamOptions, currentAssignment[1] || "");
 
         const persistAssignment = async () => {
           const teamIds = [select1.value, select2.value].filter((v) => v && v.length > 0);
