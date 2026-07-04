@@ -1,0 +1,153 @@
+import { state, getAllPlayers, classify } from "./app.js";
+import * as store from "./data.js";
+
+export function renderPlanningView(container) {
+  container.innerHTML = "";
+  const allPlayers = getAllPlayers();
+
+  // Compute each player's classification once per render and reuse it
+  // everywhere below, instead of calling classify(p) repeatedly.
+  const classifications = new Map();
+  for (const p of allPlayers) {
+    classifications.set(p.id, classify(p));
+  }
+
+  for (const gender of ["M", "F"]) {
+    const config = gender === "M" ? state.eligibilityConfig.boys : state.eligibilityConfig.girls;
+    const genderPlayers = allPlayers.filter((p) => p.gender === gender);
+
+    for (const bracket of config.brackets) {
+      const inBracket = genderPlayers.filter((p) => {
+        const result = classifications.get(p.id);
+        return (result.natural && result.natural.id === bracket.id) || (result.bridge && result.bridge.id === bracket.id);
+      });
+      if (inBracket.length === 0) continue;
+
+      const exceptionsUsed = inBracket.filter((p) => {
+        const result = classifications.get(p.id);
+        return result.bridge?.id === bracket.id && result.bridgeType === "exception";
+      }).length;
+
+      const section = document.createElement("section");
+      section.className = "bracket-section";
+      const heading = document.createElement("h3");
+      heading.textContent = `${bracket.label} (חריגים: ${exceptionsUsed}/${bracket.exceptionQuota})`;
+      section.appendChild(heading);
+
+      for (const player of inBracket) {
+        const result = classifications.get(player.id);
+        const isBridge = result.bridge?.id === bracket.id;
+        const row = document.createElement("div");
+        row.className = "player-row";
+
+        const nameSpan = document.createElement("span");
+        nameSpan.textContent = player.fullName;
+        row.appendChild(nameSpan);
+
+        if (isBridge) {
+          const badge = document.createElement("span");
+          badge.className = `badge ${result.bridgeType}`;
+          badge.textContent = result.bridgeType === "exception" ? "חריג" : "גישור";
+          row.appendChild(badge);
+        }
+
+        // A bridge-eligible player is listed under BOTH their natural bracket
+        // and their bridge bracket, for visibility. To avoid two independent,
+        // unsynchronized editors that silently overwrite each other's saves,
+        // only the natural-bracket section gets live, editable dropdowns —
+        // populated from the UNION of both brackets' teams, so a single pair
+        // of selects can express "one team from each" for a dual-registered
+        // player. The bridge section shows a read-only summary instead.
+        const isNaturalSection = result.natural && result.natural.id === bracket.id;
+
+        if (isNaturalSection) {
+          const combinedBracketIds = [bracket.id, ...(result.bridge ? [result.bridge.id] : [])];
+          const teamOptions = state.teamsConfig.filter((t) => combinedBracketIds.includes(t.bracketId));
+
+          const currentAssignment = state.assignments[player.id]?.teamIds || [];
+          // Two independent selects so a player can be assigned to up to 2 teams
+          // at once (dual registration — happens occasionally, per the spec).
+          // Options are drawn from both the natural and bridge brackets' teams
+          // so a bridge/exception player can pick one team from each without
+          // needing a second, separately-rendered editor (see isNaturalSection).
+          const buildTeamOptions = (select, options, selectedId) => {
+            const placeholder = document.createElement("option");
+            placeholder.value = "";
+            placeholder.textContent = "— לא משובץ —";
+            select.appendChild(placeholder);
+
+            for (const t of options) {
+              const option = document.createElement("option");
+              option.value = t.id;
+              option.textContent = t.label;
+              option.selected = t.id === selectedId;
+              select.appendChild(option);
+            }
+          };
+
+          const select1 = document.createElement("select");
+          buildTeamOptions(select1, teamOptions, currentAssignment[0] || "");
+          const select2 = document.createElement("select");
+          buildTeamOptions(select2, teamOptions, currentAssignment[1] || "");
+
+          const persistAssignment = async () => {
+            const teamIds = [select1.value, select2.value].filter((v) => v && v.length > 0);
+            const uniqueTeamIds = [...new Set(teamIds)];
+            const assignmentData = {
+              teamIds: uniqueTeamIds,
+              exceptionApproved: !!result.bridge && result.bridgeType === "exception",
+              note: state.assignments[player.id]?.note || "",
+            };
+            try {
+              await store.saveAssignment(player.id, assignmentData);
+              state.assignments[player.id] = assignmentData;
+            } catch (err) {
+              console.error(`Failed to save assignment for player ${player.id}`, err);
+              alert("שגיאה בשמירת השיבוץ. נסה שוב.");
+            }
+          };
+          select1.addEventListener("change", persistAssignment);
+          select2.addEventListener("change", persistAssignment);
+
+          row.appendChild(select1);
+          row.appendChild(select2);
+        } else {
+          const currentAssignment = state.assignments[player.id]?.teamIds || [];
+          const teamLabels = currentAssignment
+            .map((teamId) => state.teamsConfig.find((t) => t.id === teamId)?.label)
+            .filter(Boolean);
+          const summary = document.createElement("span");
+          summary.textContent =
+            teamLabels.length > 0
+              ? `משובץ ל: ${teamLabels.join(", ")} (ניתן לשנות משכבת הגיל הטבעית)`
+              : "לא משובץ (ניתן לשבץ משכבת הגיל הטבעית)";
+          row.appendChild(summary);
+        }
+
+        if (!player.manual) {
+          const hideBtn = document.createElement("button");
+          hideBtn.textContent = "הסתר (עזב/טעות)";
+          hideBtn.addEventListener("click", async () => {
+            try {
+              await store.savePlayerOverride(player.id, { hidden: true });
+              state.overrides[player.id] = { ...(state.overrides[player.id] || {}), hidden: true };
+              renderPlanningView(container);
+            } catch (err) {
+              console.error(`Failed to hide player ${player.id}:`, err);
+              alert("שגיאה בהסתרת השחקן. נסה שוב.");
+            }
+          });
+          row.appendChild(hideBtn);
+        }
+
+        section.appendChild(row);
+      }
+
+      container.appendChild(section);
+    }
+  }
+
+  if (container.children.length === 0) {
+    container.textContent = "אין שחקנים להצגה — ודא שהוגדרו שכבות גיל במסך ההגדרות.";
+  }
+}

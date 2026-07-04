@@ -1,0 +1,17 @@
+* { box-sizing: border-box; }
+body { font-family: system-ui, sans-serif; margin: 0; background: #f5f0e8; color: #1a1a1a; }
+#view-login { display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+#login-form { background: white; padding: 32px; border-radius: 8px; display: flex; flex-direction: column; gap: 12px; min-width: 280px; }
+#login-form input { padding: 8px; font-size: 16px; }
+#login-form button { padding: 10px; font-size: 16px; cursor: pointer; }
+.error { color: #c0392b; min-height: 1.2em; }
+#nav { display: flex; gap: 8px; padding: 12px 16px; background: #0d0d0d; }
+.nav-btn { background: none; border: none; color: #ccc; padding: 8px 12px; cursor: pointer; font-size: 15px; }
+.nav-btn.active { color: white; font-weight: bold; border-bottom: 2px solid #e85d04; }
+#logout-btn { margin-inline-start: auto; background: none; border: none; color: #ccc; cursor: pointer; }
+main { padding: 16px; max-width: 1100px; margin: 0 auto; }
+.bracket-section { background: white; border-radius: 6px; padding: 12px 16px; margin-bottom: 16px; }
+.bracket-section h3 { margin-top: 0; }
+.player-row { display: flex; align-items: center; gap: 10px; padding: 6px 0; border-bottom: 1px solid #eee; }
+.badge { font-size: 12px; padding: 2px 6px; border-radius: 10px; background: #f48c06; color: white; }
+.badge.auto { background: #6b6560; }
