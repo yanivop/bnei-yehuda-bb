@@ -762,7 +762,7 @@ export async function getPlayerOverrides() {
   return result;
 }
 
-export function saveOverride(playerId, override) {
+export function savePlayerOverride(playerId, override) {
   return setDoc(doc(db, "playerOverrides", playerId), override, { merge: true });
 }
 ```
@@ -1390,11 +1390,11 @@ git commit -m "feat: allow manually adding players missing from the scraped rost
 
 - [ ] **Step 1: Add a "hide" action per scraped player row in the planning view**
 
-Edit `squad-planner/view-planning.js`: import `saveOverride` and add a hide button next to each non-manual player's row.
+Edit `squad-planner/view-planning.js`: import `savePlayerOverride` and add a hide button next to each non-manual player's row.
 
 ```javascript
 // Add to the import line at the top:
-import { saveAssignment, saveOverride } from "./data.js";
+import { saveAssignment, savePlayerOverride } from "./data.js";
 // (remove the old `import * as store from "./data.js";` and use these named imports,
 // updating the one existing `store.saveAssignment(...)` call below to `saveAssignment(...)`)
 ```
@@ -1406,7 +1406,7 @@ Inside the player row loop in `renderPlanningView`, after `row.appendChild(selec
           const hideBtn = document.createElement("button");
           hideBtn.textContent = "הסתר (עזב/טעות)";
           hideBtn.addEventListener("click", async () => {
-            await saveOverride(player.id, { hidden: true });
+            await savePlayerOverride(player.id, { hidden: true });
             state.overrides[player.id] = { ...(state.overrides[player.id] || {}), hidden: true };
             renderPlanningView(container);
           });

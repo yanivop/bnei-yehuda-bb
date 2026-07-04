@@ -65,6 +65,6 @@ export async function getPlayerOverrides() {
   return result;
 }
 
-export function saveOverride(playerId, override) {
+export function savePlayerOverride(playerId, override) {
   return setDoc(doc(db, "playerOverrides", playerId), override, { merge: true });
 }
