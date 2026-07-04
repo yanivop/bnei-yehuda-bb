@@ -93,8 +93,14 @@ onAuthChange(async (user) => {
   if (user) {
     els.loginView.hidden = true;
     els.appView.hidden = false;
-    await loadAllData();
-    renderCurrentView();
+    try {
+      await loadAllData();
+      renderCurrentView();
+    } catch (err) {
+      console.error("Failed to load app data:", err);
+      const activeView = els.views[getActiveViewName()];
+      activeView.textContent = "שגיאה בטעינת הנתונים. רענן את הדף ונסה שוב.";
+    }
   } else {
     els.loginView.hidden = false;
     els.appView.hidden = true;
