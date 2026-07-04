@@ -135,10 +135,21 @@ function renderPlayerCorrectionsSection() {
       currentTeams: data.get("currentTeam") ? [data.get("currentTeam")] : [],
       manual: true,
     };
-    const { saveManualPlayer } = await import("./data.js");
-    await saveManualPlayer(id, player);
-    form.reset();
-    alert("השחקן נוסף. רענן את הדף כדי לראות אותו במסך התכנון.");
+    try {
+      await store.saveManualPlayer(id, player);
+      state.manualPlayers.push({ id, ...player });
+      form.reset();
+      existingList.innerHTML = "";
+      for (const p of getAllPlayers().filter((p) => p.manual)) {
+        const li = document.createElement("li");
+        li.textContent = `${p.fullName} (${p.birthDate}, ${p.gender === "M" ? "בן" : "בת"})`;
+        existingList.appendChild(li);
+      }
+      alert("השחקן נוסף בהצלחה.");
+    } catch (err) {
+      console.error("Failed to save manual player:", err);
+      alert("שגיאה בשמירת השחקן. נסה שוב.");
+    }
   });
   section.appendChild(form);
 
