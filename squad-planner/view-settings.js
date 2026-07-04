@@ -42,7 +42,12 @@ function renderBracketsSection(genderKey, title) {
       input.value = value;
       input.addEventListener("change", () => {
         const isNumeric = field === "referenceBirthYear" || field === "exceptionQuota";
-        brackets[index][field] = isNumeric ? Number(input.value) : input.value;
+        if (isNumeric) {
+          const parsed = Number(input.value);
+          brackets[index][field] = Number.isNaN(parsed) ? 0 : parsed;
+        } else {
+          brackets[index][field] = input.value;
+        }
       });
       td.appendChild(input);
       return td;
@@ -79,14 +84,19 @@ function renderBracketsSection(genderKey, title) {
   const saveBtn = document.createElement("button");
   saveBtn.textContent = "שמור שכבות";
   saveBtn.addEventListener("click", async () => {
+    if (saveBtn.disabled) return;
+    saveBtn.disabled = true;
     try {
       await store.saveEligibilityConfig(state.eligibilityConfig);
       saveBtn.textContent = "נשמר ✓";
-      setTimeout(() => (saveBtn.textContent = "שמור שכבות"), 1500);
     } catch (err) {
       console.error(err);
       saveBtn.textContent = "שגיאה בשמירה";
-      setTimeout(() => (saveBtn.textContent = "שמור שכבות"), 1500);
+    } finally {
+      setTimeout(() => {
+        saveBtn.textContent = "שמור שכבות";
+        saveBtn.disabled = false;
+      }, 1500);
     }
   });
   section.appendChild(saveBtn);
@@ -172,14 +182,19 @@ function renderTeamsSection() {
   const saveBtn = document.createElement("button");
   saveBtn.textContent = "שמור קבוצות";
   saveBtn.addEventListener("click", async () => {
+    if (saveBtn.disabled) return;
+    saveBtn.disabled = true;
     try {
       await store.saveTeamsConfig(state.teamsConfig);
       saveBtn.textContent = "נשמר ✓";
-      setTimeout(() => (saveBtn.textContent = "שמור קבוצות"), 1500);
     } catch (err) {
       console.error(err);
       saveBtn.textContent = "שגיאה בשמירה";
-      setTimeout(() => (saveBtn.textContent = "שמור קבוצות"), 1500);
+    } finally {
+      setTimeout(() => {
+        saveBtn.textContent = "שמור קבוצות";
+        saveBtn.disabled = false;
+      }, 1500);
     }
   });
   section.appendChild(saveBtn);
