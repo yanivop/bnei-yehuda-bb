@@ -5,6 +5,10 @@
  * ibasketball.co.il. Run manually / on demand — see README note below.
  */
 
+import fs from "node:fs";
+
+const CLUB_URL = "https://ibasketball.co.il/club/297-2/";
+
 const YOUTH_AGE_CODES = new Set(["U11", "U12", "U13", "U14", "U15", "U16", "U18"]);
 
 export function decodeHtml(str) {
@@ -84,4 +88,64 @@ export function parsePlayerPage(html, profileUrl) {
     gender,
     profileUrl,
   };
+}
+
+async function fetchHtml(url) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`HTTP ${res.status} for ${url}`);
+  return res.text();
+}
+
+async function mapWithConcurrency(items, limit, fn) {
+  const results = new Array(items.length);
+  let nextIndex = 0;
+  async function worker() {
+    while (nextIndex < items.length) {
+      const i = nextIndex++;
+      results[i] = await fn(items[i], i);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return results;
+}
+
+async function main() {
+  console.log(`Fetching club roster from ${CLUB_URL} ...`);
+  const clubHtml = await fetchHtml(CLUB_URL);
+  const galleryEntries = parseClubPlayerGallery(clubHtml);
+  console.log(`Found ${galleryEntries.length} player-gallery entries.`);
+
+  const byProfileUrl = new Map();
+  for (const entry of galleryEntries) {
+    if (!byProfileUrl.has(entry.profileUrl)) {
+      byProfileUrl.set(entry.profileUrl, new Set());
+    }
+    if (entry.currentTeamName) byProfileUrl.get(entry.profileUrl).add(entry.currentTeamName);
+  }
+  const uniqueProfileUrls = [...byProfileUrl.keys()];
+  console.log(`${uniqueProfileUrls.length} unique player profiles. Fetching details (concurrency 5) ...`);
+
+  const details = await mapWithConcurrency(uniqueProfileUrls, 5, async (profileUrl) => {
+    try {
+      const html = await fetchHtml(profileUrl);
+      return parsePlayerPage(html, profileUrl);
+    } catch (err) {
+      console.error(`Failed to fetch ${profileUrl}: ${err.message}`);
+      return null;
+    }
+  });
+
+  const players = details
+    .filter((p) => p && isYouthAgeCode(p.ageCode))
+    .map((p) => ({ id: extractPlayerId(p.profileUrl), ...p }));
+
+  fs.writeFileSync("players.json", JSON.stringify(players, null, 2));
+  console.log(`Wrote ${players.length} youth players to players.json (filtered from ${details.filter(Boolean).length} total profiles).`);
+}
+
+if (import.meta.url === `file://${process.argv[1]}`) {
+  main().catch((err) => {
+    console.error("Error:", err.message);
+    process.exit(1);
+  });
 }
