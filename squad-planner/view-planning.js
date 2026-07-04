@@ -67,6 +67,9 @@ export function renderPlanningView(container) {
           const currentAssignment = state.assignments[player.id]?.teamIds || [];
           // Two independent selects so a player can be assigned to up to 2 teams
           // at once (dual registration — happens occasionally, per the spec).
+          // Options are drawn from both the natural and bridge brackets' teams
+          // so a bridge/exception player can pick one team from each without
+          // needing a second, separately-rendered editor (see isNaturalSection).
           const buildTeamOptions = (select, options, selectedId) => {
             const placeholder = document.createElement("option");
             placeholder.value = "";
