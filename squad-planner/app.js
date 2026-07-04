@@ -35,6 +35,7 @@ els.loginForm.addEventListener("submit", async (e) => {
   try {
     await login(els.loginPassword.value);
   } catch (err) {
+    console.error(err);
     els.loginError.textContent = "סיסמה שגויה";
   }
 });
