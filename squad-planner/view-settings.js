@@ -1,4 +1,4 @@
-import { state } from "./app.js";
+import { state, getAllPlayers } from "./app.js";
 import * as store from "./data.js";
 
 export function renderSettingsView(container) {
@@ -6,6 +6,7 @@ export function renderSettingsView(container) {
   container.appendChild(renderBracketsSection("boys", "שכבות גיל – בנים"));
   container.appendChild(renderBracketsSection("girls", "שכבות גיל – בנות"));
   container.appendChild(renderTeamsSection());
+  container.appendChild(renderPlayerCorrectionsSection());
 }
 
 function makeHeaderRow(labels) {
@@ -100,6 +101,54 @@ function renderBracketsSection(genderKey, title) {
     }
   });
   section.appendChild(saveBtn);
+
+  return section;
+}
+
+function renderPlayerCorrectionsSection() {
+  const section = document.createElement("section");
+  section.className = "bracket-section";
+  const heading = document.createElement("h3");
+  heading.textContent = "הוספת/תיקון שחקן";
+  section.appendChild(heading);
+
+  const form = document.createElement("form");
+  form.innerHTML = `
+    <input name="fullName" placeholder="שם מלא" required>
+    <input name="birthDate" type="date" required>
+    <select name="gender"><option value="M">בן</option><option value="F">בת</option></select>
+    <input name="currentTeam" placeholder="קבוצה נוכחית (לא חובה)">
+    <button type="submit">הוסף שחקן</button>
+  `;
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const data = new FormData(form);
+    const fullName = data.get("fullName").trim();
+    const [firstName, ...rest] = fullName.split(/\s+/);
+    const id = `manual-${Date.now()}`;
+    const player = {
+      fullName,
+      firstName,
+      lastName: rest.join(" "),
+      birthDate: data.get("birthDate"),
+      gender: data.get("gender"),
+      currentTeams: data.get("currentTeam") ? [data.get("currentTeam")] : [],
+      manual: true,
+    };
+    const { saveManualPlayer } = await import("./data.js");
+    await saveManualPlayer(id, player);
+    form.reset();
+    alert("השחקן נוסף. רענן את הדף כדי לראות אותו במסך התכנון.");
+  });
+  section.appendChild(form);
+
+  const existingList = document.createElement("ul");
+  for (const player of getAllPlayers().filter((p) => p.manual)) {
+    const li = document.createElement("li");
+    li.textContent = `${player.fullName} (${player.birthDate}, ${player.gender === "M" ? "בן" : "בת"})`;
+    existingList.appendChild(li);
+  }
+  section.appendChild(existingList);
 
   return section;
 }
