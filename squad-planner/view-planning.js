@@ -34,8 +34,6 @@ export function renderPlanningView(container) {
       heading.textContent = `${bracket.label} (חריגים: ${exceptionsUsed}/${bracket.exceptionQuota})`;
       section.appendChild(heading);
 
-      const teamOptions = state.teamsConfig.filter((t) => t.bracketId === bracket.id);
-
       for (const player of inBracket) {
         const result = classifications.get(player.id);
         const isBridge = result.bridge?.id === bracket.id;
@@ -53,49 +51,75 @@ export function renderPlanningView(container) {
           row.appendChild(badge);
         }
 
-        const currentAssignment = state.assignments[player.id]?.teamIds || [];
-        // Two independent selects so a player can be assigned to up to 2 teams
-        // at once (dual registration — happens occasionally, per the spec).
-        const buildTeamOptions = (select, teamOptions, selectedId) => {
-          const placeholder = document.createElement("option");
-          placeholder.value = "";
-          placeholder.textContent = "— לא משובץ —";
-          select.appendChild(placeholder);
+        // A bridge-eligible player is listed under BOTH their natural bracket
+        // and their bridge bracket, for visibility. To avoid two independent,
+        // unsynchronized editors that silently overwrite each other's saves,
+        // only the natural-bracket section gets live, editable dropdowns —
+        // populated from the UNION of both brackets' teams, so a single pair
+        // of selects can express "one team from each" for a dual-registered
+        // player. The bridge section shows a read-only summary instead.
+        const isNaturalSection = result.natural && result.natural.id === bracket.id;
 
-          for (const t of teamOptions) {
-            const option = document.createElement("option");
-            option.value = t.id;
-            option.textContent = t.label;
-            option.selected = t.id === selectedId;
-            select.appendChild(option);
-          }
-        };
+        if (isNaturalSection) {
+          const combinedBracketIds = [bracket.id, ...(result.bridge ? [result.bridge.id] : [])];
+          const teamOptions = state.teamsConfig.filter((t) => combinedBracketIds.includes(t.bracketId));
 
-        const select1 = document.createElement("select");
-        buildTeamOptions(select1, teamOptions, currentAssignment[0] || "");
-        const select2 = document.createElement("select");
-        buildTeamOptions(select2, teamOptions, currentAssignment[1] || "");
+          const currentAssignment = state.assignments[player.id]?.teamIds || [];
+          // Two independent selects so a player can be assigned to up to 2 teams
+          // at once (dual registration — happens occasionally, per the spec).
+          const buildTeamOptions = (select, options, selectedId) => {
+            const placeholder = document.createElement("option");
+            placeholder.value = "";
+            placeholder.textContent = "— לא משובץ —";
+            select.appendChild(placeholder);
 
-        const persistAssignment = async () => {
-          const teamIds = [select1.value, select2.value].filter((v) => v && v.length > 0);
-          const uniqueTeamIds = [...new Set(teamIds)];
-          const assignmentData = {
-            teamIds: uniqueTeamIds,
-            exceptionApproved: isBridge && result.bridgeType === "exception",
-            note: state.assignments[player.id]?.note || "",
+            for (const t of options) {
+              const option = document.createElement("option");
+              option.value = t.id;
+              option.textContent = t.label;
+              option.selected = t.id === selectedId;
+              select.appendChild(option);
+            }
           };
-          try {
-            await store.saveAssignment(player.id, assignmentData);
-            state.assignments[player.id] = assignmentData;
-          } catch (err) {
-            console.error(`Failed to save assignment for player ${player.id}`, err);
-          }
-        };
-        select1.addEventListener("change", persistAssignment);
-        select2.addEventListener("change", persistAssignment);
 
-        row.appendChild(select1);
-        row.appendChild(select2);
+          const select1 = document.createElement("select");
+          buildTeamOptions(select1, teamOptions, currentAssignment[0] || "");
+          const select2 = document.createElement("select");
+          buildTeamOptions(select2, teamOptions, currentAssignment[1] || "");
+
+          const persistAssignment = async () => {
+            const teamIds = [select1.value, select2.value].filter((v) => v && v.length > 0);
+            const uniqueTeamIds = [...new Set(teamIds)];
+            const assignmentData = {
+              teamIds: uniqueTeamIds,
+              exceptionApproved: !!result.bridge && result.bridgeType === "exception",
+              note: state.assignments[player.id]?.note || "",
+            };
+            try {
+              await store.saveAssignment(player.id, assignmentData);
+              state.assignments[player.id] = assignmentData;
+            } catch (err) {
+              console.error(`Failed to save assignment for player ${player.id}`, err);
+              alert("שגיאה בשמירת השיבוץ. נסה שוב.");
+            }
+          };
+          select1.addEventListener("change", persistAssignment);
+          select2.addEventListener("change", persistAssignment);
+
+          row.appendChild(select1);
+          row.appendChild(select2);
+        } else {
+          const currentAssignment = state.assignments[player.id]?.teamIds || [];
+          const teamLabels = currentAssignment
+            .map((teamId) => state.teamsConfig.find((t) => t.id === teamId)?.label)
+            .filter(Boolean);
+          const summary = document.createElement("span");
+          summary.textContent =
+            teamLabels.length > 0
+              ? `משובץ ל: ${teamLabels.join(", ")} (ניתן לשנות משכבת הגיל הטבעית)`
+              : "לא משובץ (ניתן לשבץ משכבת הגיל הטבעית)";
+          row.appendChild(summary);
+        }
 
         if (!player.manual) {
           const hideBtn = document.createElement("button");
