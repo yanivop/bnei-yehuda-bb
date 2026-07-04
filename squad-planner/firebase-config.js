@@ -1,11 +1,11 @@
 // Values from Task 1 (Firebase Console → Project settings → Your apps → Web app).
 export const firebaseConfig = {
-  apiKey: "REPLACE_WITH_YOUR_API_KEY",
-  authDomain: "REPLACE_WITH_YOUR_PROJECT.firebaseapp.com",
-  projectId: "REPLACE_WITH_YOUR_PROJECT",
-  storageBucket: "REPLACE_WITH_YOUR_PROJECT.appspot.com",
-  messagingSenderId: "REPLACE_WITH_SENDER_ID",
-  appId: "REPLACE_WITH_APP_ID",
+  apiKey: "AIzaSyCVPFNJS4hawy6v9OcX7OSKmA8abpfNUFU",
+  authDomain: "bnei-yehuda-squad-planner.firebaseapp.com",
+  projectId: "bnei-yehuda-squad-planner",
+  storageBucket: "bnei-yehuda-squad-planner.firebasestorage.app",
+  messagingSenderId: "187443762433",
+  appId: "1:187443762433:web:d1236804fb36a1aa757700",
 };
 
 // The fixed identity behind the shared "password" login screen.
