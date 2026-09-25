@@ -766,6 +766,16 @@ function buildHtml(matches) {
     white-space: nowrap;
     line-height: 1.5;
   }
+  .freedate-chip.has-match { cursor: pointer; }
+  .freedate-match-detail {
+    display: none;
+    margin-top: 4px;
+    font-size: 10px;
+    line-height: 1.4;
+    color: var(--muted);
+    text-align: center;
+  }
+  .freedate-match-detail.show { display: block; }
   /* holiday note */
   .freedate-chip.noted { border-color: var(--amber); background: #fffbf0; }
   .freedate-note {
@@ -1675,13 +1685,19 @@ function analyzeDay(dateStr) {
       const slots = [];
       if (t + 120 <= 21 * 60) slots.push(minToTime(t + 120));
       if (t - 120 >= 17 * 60) slots.push(minToTime(t - 120));
-      return slots.length ? { existingCount: 1, slots } : null;
+      return slots.length ? { existingCount: 1, slots, matches: homeMatches } : null;
     }
     return null;
   }
 
   // ראשון, שלישי, שבת — רק אם פנוי לחלוטין
   return n === 0 ? { existingCount: 0, slots: [] } : null;
+}
+
+function toggleFreedateDetail(e, id) {
+  e.stopPropagation();
+  const el = document.getElementById(id);
+  if (el) el.classList.toggle('show');
 }
 
 function renderFreeDates() {
@@ -1738,7 +1754,7 @@ function renderFreeDates() {
     <div class="freedates-month">
       <div class="freedates-month-title">\${label}</div>
       <div class="freedates-grid">
-        \${items.map(({ date: d, key, existingCount, slots }) => {
+        \${items.map(({ date: d, key, existingCount, slots, matches }) => {
           const dow = d.getDay();
           const isWeekend = dow === 5 || dow === 6;
           const hasMatch = existingCount > 0;
@@ -1760,12 +1776,19 @@ function renderFreeDates() {
             ? \`<span class="freedate-note">\${holidayNote}</span>\`
             : '';
 
-          return \`<div class="\${classes}">
+          const detailId = 'freedate-detail-' + key;
+          const detailHtml = hasMatch && matches?.[0]
+            ? \`<div class="freedate-match-detail" id="\${detailId}">\${matches[0].home} נגד \${matches[0].away}<br>\${matches[0].league} • \${matches[0].timeLabel}</div>\`
+            : '';
+          const clickAttr = hasMatch ? \` onclick="toggleFreedateDetail(event, '\${detailId}')"\` : '';
+
+          return \`<div class="\${classes}"\${clickAttr}>
             \${badgeHtml}
             <span class="freedate-dayname">יום \${dayNames[dow]}</span>
             <span class="freedate-num">\${d.getDate()}</span>
             \${slotsHtml}
             \${noteHtml}
+            \${detailHtml}
           </div>\`;
         }).join('')}
       </div>
