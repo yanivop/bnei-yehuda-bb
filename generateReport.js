@@ -1701,7 +1701,7 @@ function toggleFreedateDetail(e, id) {
 }
 
 function renderFreeDates() {
-  const FROM = new Date().toISOString().slice(0, 10);
+  const FROM = '2026-10-04';
   let lastMatchDate = FROM;
   for (const m of MATCHES) {
     const d = m.date.slice(0, 10);
