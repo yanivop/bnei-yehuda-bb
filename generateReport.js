@@ -1200,7 +1200,7 @@ function buildHtml(matches) {
     </div>
     <div class="season-info">
       <div class="season-tag">עונה</div>
-      <div class="season-val">2026–2027</div>
+      <div class="season-val">2026/2027</div>
       <div class="total-count" id="total-matches-label"></div>
     </div>
   </div>
