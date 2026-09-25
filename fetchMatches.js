@@ -6,7 +6,7 @@
 
 const CONFIG = {
   baseUrl: "https://ibasketball.co.il/wp-json/sportspress/v2",
-  seasonId: "119472",
+  seasonId: "119888",
   clubId: "715472",
   perPage: 100,
 };
