@@ -1163,7 +1163,7 @@
 </div>
 
 <footer class="report-footer">
-  <div>נוצר ב־26 בספטמבר 2026, 01:53</div>
+  <div>נוצר ב־26 בספטמבר 2026, 01:58</div>
   <div>מקור: ibasketball.co.il</div>
 </footer>
 
@@ -1507,10 +1507,14 @@ function minToTime(min) {
   return String(Math.floor(min / 60)).padStart(2, '0') + ':' + String(min % 60).padStart(2, '0');
 }
 
+// A home game in one of these leagues closes the whole day to any other game
+const DAY_CLOSING_LEAGUES = new Set(['ליגת על נשים', 'גביע אתנה ווינר']);
+
 // Returns null (day not available) or { existingCount, slots[] }
 function analyzeDay(dateStr) {
   const dow = new Date(dateStr).getDay(); // 0=Sun,1=Mon,2=Tue,3=Wed,4=Thu,5=Fri,6=Sat
   const homeMatches = MATCHES.filter(m => m.date.slice(0, 10) === dateStr && isOurs(m.home));
+  if (homeMatches.some(m => DAY_CLOSING_LEAGUES.has(m.league))) return null;
   const homeTimes = homeMatches.map(m => timeToMin(m.timeLabel)).sort((a, b) => a - b);
   const n = homeMatches.length;
 
