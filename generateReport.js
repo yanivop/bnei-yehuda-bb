@@ -1694,16 +1694,20 @@ function analyzeDay(dateStr) {
 }
 
 function renderFreeDates() {
-  const FROM = '2026-04-19';
-  const TO   = '2026-06-20';
+  const FROM = new Date().toISOString().slice(0, 10);
+  let lastMatchDate = FROM;
+  for (const m of MATCHES) {
+    const d = m.date.slice(0, 10);
+    if (d > lastMatchDate) lastMatchDate = d;
+  }
+  const toDate = new Date(lastMatchDate);
+  toDate.setDate(toDate.getDate() + 7); // buffer past the last known match
+  const TO = toDate.toISOString().slice(0, 10);
 
+  // חגים וימי זיכרון לעונת 2026–2027 — עדכן ידנית בכל עונה
   const HOLIDAYS_EXCLUDE = new Set([
-    '2026-04-21', // יום הזיכרון
-    '2026-04-22', // יום העצמאות
-    '2026-05-21', // ערב שבועות
-    '2026-05-22', // שבועות
   ]);
-  const HOLIDAYS_NOTE = { '2026-05-04': 'ערב ל״ג בעומר' };
+  const HOLIDAYS_NOTE = {};
 
   // Collect days with available capacity
   const available = [];
