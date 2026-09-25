@@ -1625,9 +1625,9 @@ function renderConflicts() {
       <div class="conflict-game">
         <span class="conflict-game-time">\${m.timeLabel}</span>
         <div class="conflict-game-info">
-          <div class="conflict-game-team">\${m.home}</div>
+          <div class="conflict-game-team">\${m.league}</div>
           <div class="conflict-game-vs">נגד \${m.away}</div>
-          <div class="conflict-game-meta">\${m.league}</div>
+          <div class="conflict-game-meta">\${m.home}</div>
           <button class="email-btn" onclick='openEmailModal(\${JSON.stringify(m).replace(/'/g, "&#39;")})'>✉ צור מייל לשינוי</button>
         </div>
       </div>\`).join('');
