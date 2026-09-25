@@ -1660,24 +1660,11 @@ function analyzeDay(dateStr) {
   const homeTimes = homeMatches.map(m => timeToMin(m.timeLabel)).sort((a, b) => a - b);
   const n = homeMatches.length;
 
-  if (dow === 5) { // שישי — 2 סלוטים: עד 15:00, הפרש שעתיים
-    if (n >= 2) return null;
-    if (n === 0) return { existingCount: 0, slots: ['13:00', '15:00'] };
-    const t = homeTimes[0];
-    const slots = [];
-    if (t + 120 <= 900) slots.push(minToTime(t + 120));              // אחרי
-    if (t - 120 >= 720 && t - 120 <= 900) slots.push(minToTime(t - 120)); // לפני (לא לפני 12:00)
-    return slots.length ? { existingCount: 1, slots } : null;
+  if (dow === 5) { // שישי — סלוט יחיד 13:00, רק אם אין משחק (שעון חורף)
+    return n === 0 ? { existingCount: 0, slots: ['13:00'] } : null;
   }
 
-  if (dow === 1 || dow === 4) { // שני/חמישי — אימון 19:00-21:00, סלוט 17:30
-    const SLOT = 17 * 60 + 30;
-    const conflict = homeTimes.some(t => Math.abs(t - SLOT) < 120);
-    if (conflict) return null;
-    return { existingCount: n, slots: ['17:30'] };
-  }
-
-  if (dow === 3) { // רביעי
+  if (dow === 1 || dow === 3 || dow === 4) { // שני/רביעי/חמישי — חלון 17:00-21:00, הפרש שעתיים ממשחק קיים
     if (n === 0) return { existingCount: 0, slots: [] };
     if (n === 1) {
       const t = homeTimes[0];
