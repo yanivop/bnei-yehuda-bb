@@ -1871,9 +1871,10 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
     document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
     btn.classList.add('active');
     document.getElementById('panel-' + btn.dataset.tab).classList.add('active');
-    // Hide toolbar when on conflicts tab
+    // Toolbar (location/team/sort filters) only applies to schedule + conflicts,
+    // not free-dates
     document.querySelector('.toolbar').style.display =
-      btn.dataset.tab === 'schedule' ? '' : 'none';
+      btn.dataset.tab === 'freedates' ? 'none' : '';
   });
 });
 
