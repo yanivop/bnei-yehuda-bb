@@ -22,7 +22,7 @@ const EXCLUDED_LEAGUES = new Set([
 ]);
 
 // Leagues excluded only from conflict detection (still shown in main schedule)
-const CONFLICTS_EXCLUDED_PREFIXES = ["קט סל"];
+const CONFLICTS_EXCLUDED_PREFIXES = ["קט סל", "נוער מחוזית דן"];
 
 // ─── Config: games available in the transportation request form dropdown ───────
 // Update this list whenever the Google Form is updated.
