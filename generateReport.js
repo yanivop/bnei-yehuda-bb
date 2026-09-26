@@ -288,6 +288,45 @@ function buildHtml(matches) {
   .toolbar-section:first-child { padding-right: 0; }
   .toolbar-section:last-child { border-left: none; padding-right: 0; padding-left: 0; margin-right: auto; }
 
+  /* Active team-filter chips */
+  .active-filters {
+    max-width: 1300px;
+    margin: 0 auto;
+    padding: 0 40px 10px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .active-filters:empty { display: none; }
+  .filter-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--cool);
+    background: rgba(2,62,138,0.08);
+    border: 1px solid rgba(2,62,138,0.2);
+    border-radius: 100px;
+    padding: 3px 6px 3px 10px;
+  }
+  .filter-chip button {
+    border: none;
+    background: rgba(2,62,138,0.12);
+    color: var(--cool);
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    font-size: 10px;
+    line-height: 1;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+  }
+  .filter-chip button:hover { background: var(--orange); color: #fff; }
+
   .section-label {
     font-size: 11px;
     font-weight: 700;
@@ -1035,6 +1074,7 @@ function buildHtml(matches) {
       gap: 0;
       row-gap: 0;
     }
+    .active-filters { padding: 0 12px 10px; }
     .toolbar-section {
       padding: 10px 12px 10px 0;
       border-left: none;
@@ -1266,6 +1306,7 @@ function buildHtml(matches) {
     </div>
 
   </div>
+  <div class="active-filters" id="active-filters"></div>
 </div>
 
 <div class="menu-backdrop" id="menu-backdrop"></div>
@@ -1380,6 +1421,7 @@ function onTeamChange(cb) {
   updateBadge();
   render();
   renderConflicts();
+  renderActiveFilters();
 }
 function selectAllTeams() {
   filterTeams.clear();
@@ -1387,12 +1429,35 @@ function selectAllTeams() {
     cb.checked = true;
     filterTeams.add(cb.value);
   });
-  updateBadge(); render(); renderConflicts();
+  updateBadge(); render(); renderConflicts(); renderActiveFilters();
 }
 function clearAllTeams() {
   filterTeams.clear();
   checkboxContainer.querySelectorAll('input').forEach(cb => cb.checked = false);
-  updateBadge(); render(); renderConflicts();
+  updateBadge(); render(); renderConflicts(); renderActiveFilters();
+}
+
+function renderActiveFilters() {
+  const container = document.getElementById('active-filters');
+  if (!container) return;
+  const keys = [...filterTeams];
+  container.innerHTML = keys.map((key, i) => {
+    const league = key.split('||')[1] || key;
+    return \`<span class="filter-chip">\${league}<button type="button" onclick="removeTeamFilterAt(\${i})" aria-label="הסר סינון">✕</button></span>\`;
+  }).join('');
+}
+
+function removeTeamFilterAt(i) {
+  const key = [...filterTeams][i];
+  if (key === undefined) return;
+  filterTeams.delete(key);
+  checkboxContainer.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+    if (cb.value === key) cb.checked = false;
+  });
+  updateBadge();
+  render();
+  renderConflicts();
+  renderActiveFilters();
 }
 function updateBadge() {
   const badge = document.getElementById('teams-badge');
@@ -1932,6 +1997,7 @@ document.getElementById('tab-badge-schedule').textContent = total;
 render();
 renderConflicts();
 renderFreeDates();
+renderActiveFilters();
 </script>
 
 <div class="email-modal-overlay" id="email-overlay" onclick="closeEmailModal()">
