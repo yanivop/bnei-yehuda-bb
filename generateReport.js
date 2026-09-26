@@ -8,7 +8,7 @@ import { writeFileSync } from "fs";
 
 const CONFIG = {
   baseUrl: "https://ibasketball.co.il/wp-json/sportspress/v2",
-  seasonId: "119472",
+  seasonId: "119888",
   clubId: "715472",
   perPage: 100,
 };
@@ -22,7 +22,7 @@ const EXCLUDED_LEAGUES = new Set([
 ]);
 
 // Leagues excluded only from conflict detection (still shown in main schedule)
-const CONFLICTS_EXCLUDED_PREFIXES = ["קט סל"];
+const CONFLICTS_EXCLUDED_PREFIXES = ["קט סל", "נוער מחוזית דן"];
 
 // ─── Config: games available in the transportation request form dropdown ───────
 // Update this list whenever the Google Form is updated.
@@ -287,6 +287,45 @@ function buildHtml(matches) {
   }
   .toolbar-section:first-child { padding-right: 0; }
   .toolbar-section:last-child { border-left: none; padding-right: 0; padding-left: 0; margin-right: auto; }
+
+  /* Active team-filter chips */
+  .active-filters {
+    max-width: 1300px;
+    margin: 0 auto;
+    padding: 0 40px 10px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .active-filters:empty { display: none; }
+  .filter-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--cool);
+    background: rgba(2,62,138,0.08);
+    border: 1px solid rgba(2,62,138,0.2);
+    border-radius: 100px;
+    padding: 3px 6px 3px 10px;
+  }
+  .filter-chip button {
+    border: none;
+    background: rgba(2,62,138,0.12);
+    color: var(--cool);
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    font-size: 10px;
+    line-height: 1;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+  }
+  .filter-chip button:hover { background: var(--orange); color: #fff; }
 
   .section-label {
     font-size: 11px;
@@ -766,6 +805,16 @@ function buildHtml(matches) {
     white-space: nowrap;
     line-height: 1.5;
   }
+  .freedate-chip.has-match { cursor: pointer; }
+  .freedate-match-detail {
+    display: none;
+    margin-top: 4px;
+    font-size: 10px;
+    line-height: 1.4;
+    color: var(--muted);
+    text-align: center;
+  }
+  .freedate-match-detail.show { display: block; }
   /* holiday note */
   .freedate-chip.noted { border-color: var(--amber); background: #fffbf0; }
   .freedate-note {
@@ -1025,6 +1074,7 @@ function buildHtml(matches) {
       gap: 0;
       row-gap: 0;
     }
+    .active-filters { padding: 0 12px 10px; }
     .toolbar-section {
       padding: 10px 12px 10px 0;
       border-left: none;
@@ -1200,7 +1250,7 @@ function buildHtml(matches) {
     </div>
     <div class="season-info">
       <div class="season-tag">עונה</div>
-      <div class="season-val">2025–2026</div>
+      <div class="season-val">2026/2027</div>
       <div class="total-count" id="total-matches-label"></div>
     </div>
   </div>
@@ -1256,6 +1306,7 @@ function buildHtml(matches) {
     </div>
 
   </div>
+  <div class="active-filters" id="active-filters"></div>
 </div>
 
 <div class="menu-backdrop" id="menu-backdrop"></div>
@@ -1358,8 +1409,8 @@ OUR_TEAMS.forEach(({ team, league }) => {
   item.innerHTML = \`
     <input type="checkbox" value="\${key}" onchange="onTeamChange(this)">
     <span class="team-item-text">
-      <span class="team-item-name">\${team}</span>
-      <span class="team-item-league">\${league}</span>
+      <span class="team-item-name">\${league}</span>
+      <span class="team-item-league">\${team}</span>
     </span>\`;
   checkboxContainer.appendChild(item);
 });
@@ -1369,6 +1420,8 @@ function onTeamChange(cb) {
   else filterTeams.delete(cb.value);
   updateBadge();
   render();
+  renderConflicts();
+  renderActiveFilters();
 }
 function selectAllTeams() {
   filterTeams.clear();
@@ -1376,12 +1429,35 @@ function selectAllTeams() {
     cb.checked = true;
     filterTeams.add(cb.value);
   });
-  updateBadge(); render();
+  updateBadge(); render(); renderConflicts(); renderActiveFilters();
 }
 function clearAllTeams() {
   filterTeams.clear();
   checkboxContainer.querySelectorAll('input').forEach(cb => cb.checked = false);
-  updateBadge(); render();
+  updateBadge(); render(); renderConflicts(); renderActiveFilters();
+}
+
+function renderActiveFilters() {
+  const container = document.getElementById('active-filters');
+  if (!container) return;
+  const keys = [...filterTeams];
+  container.innerHTML = keys.map((key, i) => {
+    const league = key.split('||')[1] || key;
+    return \`<span class="filter-chip">\${league}<button type="button" onclick="removeTeamFilterAt(\${i})" aria-label="הסר סינון">✕</button></span>\`;
+  }).join('');
+}
+
+function removeTeamFilterAt(i) {
+  const key = [...filterTeams][i];
+  if (key === undefined) return;
+  filterTeams.delete(key);
+  checkboxContainer.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+    if (cb.value === key) cb.checked = false;
+  });
+  updateBadge();
+  render();
+  renderConflicts();
+  renderActiveFilters();
 }
 function updateBadge() {
   const badge = document.getElementById('teams-badge');
@@ -1587,9 +1663,12 @@ function detectConflicts() {
       clusters.get(root).push(g);
     });
 
-    for (const cluster of clusters.values())
-      if (cluster.length >= 2)
-        conflicts.push({ day, games: cluster });
+    for (const cluster of clusters.values()) {
+      if (cluster.length < 2) continue;
+      // Team filter: show the whole conflict if any of its games matches
+      if (filterTeams.size > 0 && !cluster.some(m => filterTeams.has(\`\${getOurTeam(m)}||\${m.league}\`))) continue;
+      conflicts.push({ day, games: cluster });
+    }
   }
 
   conflicts.sort((x, y) => x.day.localeCompare(y.day));
@@ -1625,9 +1704,9 @@ function renderConflicts() {
       <div class="conflict-game">
         <span class="conflict-game-time">\${m.timeLabel}</span>
         <div class="conflict-game-info">
-          <div class="conflict-game-team">\${m.home}</div>
+          <div class="conflict-game-team">\${m.league}</div>
           <div class="conflict-game-vs">נגד \${m.away}</div>
-          <div class="conflict-game-meta">\${m.league}</div>
+          <div class="conflict-game-meta">\${m.home}</div>
           <button class="email-btn" onclick='openEmailModal(\${JSON.stringify(m).replace(/'/g, "&#39;")})'>✉ צור מייל לשינוי</button>
         </div>
       </div>\`).join('');
@@ -1653,38 +1732,29 @@ function minToTime(min) {
   return String(Math.floor(min / 60)).padStart(2, '0') + ':' + String(min % 60).padStart(2, '0');
 }
 
+// A home game in one of these leagues closes the whole day to any other game
+const DAY_CLOSING_LEAGUES = new Set(['ליגת על נשים', 'גביע אתנה ווינר']);
+
 // Returns null (day not available) or { existingCount, slots[] }
 function analyzeDay(dateStr) {
   const dow = new Date(dateStr).getDay(); // 0=Sun,1=Mon,2=Tue,3=Wed,4=Thu,5=Fri,6=Sat
   const homeMatches = MATCHES.filter(m => m.date.slice(0, 10) === dateStr && isOurs(m.home));
+  if (homeMatches.some(m => DAY_CLOSING_LEAGUES.has(m.league))) return null;
   const homeTimes = homeMatches.map(m => timeToMin(m.timeLabel)).sort((a, b) => a - b);
   const n = homeMatches.length;
 
-  if (dow === 5) { // שישי — 2 סלוטים: עד 15:00, הפרש שעתיים
-    if (n >= 2) return null;
-    if (n === 0) return { existingCount: 0, slots: ['13:00', '15:00'] };
-    const t = homeTimes[0];
-    const slots = [];
-    if (t + 120 <= 900) slots.push(minToTime(t + 120));              // אחרי
-    if (t - 120 >= 720 && t - 120 <= 900) slots.push(minToTime(t - 120)); // לפני (לא לפני 12:00)
-    return slots.length ? { existingCount: 1, slots } : null;
+  if (dow === 5) { // שישי — סלוט יחיד 13:00, רק אם אין משחק (שעון חורף)
+    return n === 0 ? { existingCount: 0, slots: ['13:00'] } : null;
   }
 
-  if (dow === 1 || dow === 4) { // שני/חמישי — אימון 19:00-21:00, סלוט 17:30
-    const SLOT = 17 * 60 + 30;
-    const conflict = homeTimes.some(t => Math.abs(t - SLOT) < 120);
-    if (conflict) return null;
-    return { existingCount: n, slots: ['17:30'] };
-  }
-
-  if (dow === 3) { // רביעי
+  if (dow === 1 || dow === 3 || dow === 4) { // שני/רביעי/חמישי — חלון 17:00-21:00, הפרש שעתיים ממשחק קיים
     if (n === 0) return { existingCount: 0, slots: [] };
     if (n === 1) {
       const t = homeTimes[0];
       const slots = [];
       if (t + 120 <= 21 * 60) slots.push(minToTime(t + 120));
       if (t - 120 >= 17 * 60) slots.push(minToTime(t - 120));
-      return slots.length ? { existingCount: 1, slots } : null;
+      return slots.length ? { existingCount: 1, slots, matches: homeMatches } : null;
     }
     return null;
   }
@@ -1693,17 +1763,27 @@ function analyzeDay(dateStr) {
   return n === 0 ? { existingCount: 0, slots: [] } : null;
 }
 
-function renderFreeDates() {
-  const FROM = '2026-04-19';
-  const TO   = '2026-06-20';
+function toggleFreedateDetail(e, id) {
+  e.stopPropagation();
+  const el = document.getElementById(id);
+  if (el) el.classList.toggle('show');
+}
 
+function renderFreeDates() {
+  const FROM = '2026-10-04';
+  let lastMatchDate = FROM;
+  for (const m of MATCHES) {
+    const d = m.date.slice(0, 10);
+    if (d > lastMatchDate) lastMatchDate = d;
+  }
+  const toDate = new Date(lastMatchDate);
+  toDate.setDate(toDate.getDate() + 7); // buffer past the last known match
+  const TO = toDate.toISOString().slice(0, 10);
+
+  // חגים וימי זיכרון לעונת 2026–2027 — עדכן ידנית בכל עונה
   const HOLIDAYS_EXCLUDE = new Set([
-    '2026-04-21', // יום הזיכרון
-    '2026-04-22', // יום העצמאות
-    '2026-05-21', // ערב שבועות
-    '2026-05-22', // שבועות
   ]);
-  const HOLIDAYS_NOTE = { '2026-05-04': 'ערב ל״ג בעומר' };
+  const HOLIDAYS_NOTE = {};
 
   // Collect days with available capacity
   const available = [];
@@ -1743,7 +1823,7 @@ function renderFreeDates() {
     <div class="freedates-month">
       <div class="freedates-month-title">\${label}</div>
       <div class="freedates-grid">
-        \${items.map(({ date: d, key, existingCount, slots }) => {
+        \${items.map(({ date: d, key, existingCount, slots, matches }) => {
           const dow = d.getDay();
           const isWeekend = dow === 5 || dow === 6;
           const hasMatch = existingCount > 0;
@@ -1765,12 +1845,19 @@ function renderFreeDates() {
             ? \`<span class="freedate-note">\${holidayNote}</span>\`
             : '';
 
-          return \`<div class="\${classes}">
+          const detailId = 'freedate-detail-' + key;
+          const detailHtml = hasMatch && matches?.[0]
+            ? \`<div class="freedate-match-detail" id="\${detailId}">\${matches[0].home} נגד \${matches[0].away}<br>\${matches[0].league} • \${matches[0].timeLabel}</div>\`
+            : '';
+          const clickAttr = hasMatch ? \` onclick="toggleFreedateDetail(event, '\${detailId}')"\` : '';
+
+          return \`<div class="\${classes}"\${clickAttr}>
             \${badgeHtml}
             <span class="freedate-dayname">יום \${dayNames[dow]}</span>
             <span class="freedate-num">\${d.getDate()}</span>
             \${slotsHtml}
             \${noteHtml}
+            \${detailHtml}
           </div>\`;
         }).join('')}
       </div>
@@ -1784,9 +1871,10 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
     document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
     btn.classList.add('active');
     document.getElementById('panel-' + btn.dataset.tab).classList.add('active');
-    // Hide toolbar when on conflicts tab
+    // Toolbar (location/team/sort filters) only applies to schedule + conflicts,
+    // not free-dates
     document.querySelector('.toolbar').style.display =
-      btn.dataset.tab === 'schedule' ? '' : 'none';
+      btn.dataset.tab === 'freedates' ? 'none' : '';
   });
 });
 
@@ -1910,6 +1998,7 @@ document.getElementById('tab-badge-schedule').textContent = total;
 render();
 renderConflicts();
 renderFreeDates();
+renderActiveFilters();
 </script>
 
 <div class="email-modal-overlay" id="email-overlay" onclick="closeEmailModal()">
