@@ -1368,8 +1368,8 @@ OUR_TEAMS.forEach(({ team, league }) => {
   item.innerHTML = \`
     <input type="checkbox" value="\${key}" onchange="onTeamChange(this)">
     <span class="team-item-text">
-      <span class="team-item-name">\${team}</span>
-      <span class="team-item-league">\${league}</span>
+      <span class="team-item-name">\${league}</span>
+      <span class="team-item-league">\${team}</span>
     </span>\`;
   checkboxContainer.appendChild(item);
 });
