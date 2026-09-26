@@ -1379,6 +1379,7 @@ function onTeamChange(cb) {
   else filterTeams.delete(cb.value);
   updateBadge();
   render();
+  renderConflicts();
 }
 function selectAllTeams() {
   filterTeams.clear();
@@ -1386,12 +1387,12 @@ function selectAllTeams() {
     cb.checked = true;
     filterTeams.add(cb.value);
   });
-  updateBadge(); render();
+  updateBadge(); render(); renderConflicts();
 }
 function clearAllTeams() {
   filterTeams.clear();
   checkboxContainer.querySelectorAll('input').forEach(cb => cb.checked = false);
-  updateBadge(); render();
+  updateBadge(); render(); renderConflicts();
 }
 function updateBadge() {
   const badge = document.getElementById('teams-badge');
@@ -1597,9 +1598,12 @@ function detectConflicts() {
       clusters.get(root).push(g);
     });
 
-    for (const cluster of clusters.values())
-      if (cluster.length >= 2)
-        conflicts.push({ day, games: cluster });
+    for (const cluster of clusters.values()) {
+      if (cluster.length < 2) continue;
+      // Team filter: show the whole conflict if any of its games matches
+      if (filterTeams.size > 0 && !cluster.some(m => filterTeams.has(\`\${getOurTeam(m)}||\${m.league}\`))) continue;
+      conflicts.push({ day, games: cluster });
+    }
   }
 
   conflicts.sort((x, y) => x.day.localeCompare(y.day));
