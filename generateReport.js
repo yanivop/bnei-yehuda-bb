@@ -24,6 +24,14 @@ const EXCLUDED_LEAGUES = new Set([
 // Leagues excluded only from conflict detection (still shown in main schedule)
 const CONFLICTS_EXCLUDED_PREFIXES = ["קט סל", "נוער מחוזית דן"];
 
+// Leagues excluded from the main schedule, but tracked separately for the
+// "optional venues" tab (their home venue frees up when they play away).
+const OPTIONAL_VENUE_LEAGUES = new Set([
+  "א נשים מרכז",
+  "א דן",
+  "ב תל אביב",
+]);
+
 // ─── Config: games available in the transportation request form dropdown ───────
 // Update this list whenever the Google Form is updated.
 // Format: "[league] | [home team] - [away team]"  (exactly as it appears in the form)
@@ -83,9 +91,69 @@ async function fetchAllMatches() {
   const venueIds = [...new Set(allEvents.flatMap(e => e.venues || []))];
   await Promise.all(venueIds.map(getVenueName));
 
-  return allEvents
-    .map(normalizeEvent)
-    .filter(m => !EXCLUDED_LEAGUES.has(m.league));
+  const normalized = allEvents.map(normalizeEvent);
+  const matches = normalized.filter(m => !EXCLUDED_LEAGUES.has(m.league));
+  const optionalVenues = buildOptionalVenues(normalized);
+
+  return { matches, optionalVenues };
+}
+
+// Most frequent value in an array (used to derive each team's usual home
+// venue/time from its actual game history, instead of hardcoding it).
+function mode(values) {
+  const counts = new Map();
+  let best = null, bestCount = 0;
+  for (const v of values) {
+    const c = (counts.get(v) || 0) + 1;
+    counts.set(v, c);
+    if (c > bestCount) { bestCount = c; best = v; }
+  }
+  return best;
+}
+
+function addMinutes(timeLabel, delta) {
+  const [h, m] = timeLabel.split(":").map(Number);
+  const total = ((h * 60 + m + delta) % 1440 + 1440) % 1440;
+  return `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
+}
+
+// For each of OPTIONAL_VENUE_LEAGUES, find that team's usual home venue/time
+// (derived from its home games), then list every away game as a slot where
+// that venue frees up: 30 min before the usual home slot, for 2 hours.
+function buildOptionalVenues(allMatches) {
+  const result = [];
+
+  for (const league of OPTIONAL_VENUE_LEAGUES) {
+    const leagueMatches = allMatches.filter(m => m.league === league);
+    const homeGames = leagueMatches.filter(m => m.home.includes("בני יהודה"));
+    if (homeGames.length === 0) continue;
+
+    const ourTeam = mode(homeGames.map(m => m.home));
+    const venue = mode(homeGames.map(m => m.venue).filter(Boolean));
+    const slotTime = mode(homeGames.map(m => m.timeLabel));
+    if (!venue || !slotTime) continue;
+
+    const availFrom = addMinutes(slotTime, -30);
+    const availTo = addMinutes(availFrom, 120);
+
+    const awayGames = leagueMatches.filter(m => m.away.includes("בני יהודה"));
+    for (const g of awayGames) {
+      result.push({
+        date: g.date,
+        dateLabel: g.dateLabel,
+        timeLabel: g.timeLabel,
+        team: ourTeam,
+        league,
+        opponent: g.home,
+        venue,
+        availFrom,
+        availTo,
+        matchUrl: g.matchUrl,
+      });
+    }
+  }
+
+  return result.sort((a, b) => a.date.localeCompare(b.date));
 }
 
 function normalizeEvent(raw) {
@@ -126,7 +194,7 @@ function formatDateHebrew(iso) {
 
 // ─── HTML Template ────────────────────────────────────────────────────────────
 
-function buildHtml(matches) {
+function buildHtml(matches, optionalVenues) {
   // Unique team+league combinations, sorted by team name then league
   const teamLeagueSeen = new Map();
   for (const m of matches) {
@@ -140,6 +208,7 @@ function buildHtml(matches) {
 
   const jsonData = JSON.stringify(matches);
   const jsonTeams = JSON.stringify(ourTeams);
+  const jsonOptionalVenues = JSON.stringify(optionalVenues);
   const _now = new Date();
   const genDate = _now.toLocaleDateString("he-IL", { day:"numeric", month:"long", year:"numeric", timeZone:"Asia/Jerusalem" });
   const genTime = _now.toLocaleTimeString("he-IL", { hour:"2-digit", minute:"2-digit", hour12:false, timeZone:"Asia/Jerusalem" });
@@ -1325,6 +1394,10 @@ function buildHtml(matches) {
     תאריכים פנויים
     <span class="tab-badge none" id="tab-badge-freedates">0</span>
   </button>
+  <button class="tab-btn" data-tab="optionalvenues">
+    אולמות אופציונליים
+    <span class="tab-badge none" id="tab-badge-optionalvenues">0</span>
+  </button>
 </div>
 
 <!-- TAB 1: SCHEDULE -->
@@ -1359,6 +1432,28 @@ function buildHtml(matches) {
   <div class="freedates-wrap" id="freedates-body"></div>
 </div>
 
+<!-- TAB 4: OPTIONAL VENUES -->
+<div class="tab-panel" id="panel-optionalvenues">
+  <main class="main">
+    <div class="table-wrap">
+      <table id="optionalvenues-table">
+        <thead>
+          <tr>
+            <th class="col-date">תאריך</th>
+            <th>קבוצה</th>
+            <th class="col-league">ליגה</th>
+            <th>יריב (בית)</th>
+            <th>אולם פנוי</th>
+            <th>זמינות</th>
+            <th class="col-link"></th>
+          </tr>
+        </thead>
+        <tbody id="optionalvenues-body"></tbody>
+      </table>
+    </div>
+  </main>
+</div>
+
 <footer class="report-footer">
   <div>נוצר ב־${genDate}, ${genTime}</div>
   <div>מקור: ibasketball.co.il</div>
@@ -1367,6 +1462,7 @@ function buildHtml(matches) {
 <script>
 const MATCHES = ${jsonData};
 const OUR_TEAMS = ${jsonTeams};
+const OPTIONAL_VENUES = ${jsonOptionalVenues};
 const CONFLICTS_EXCLUDED_PREFIXES = ${JSON.stringify(CONFLICTS_EXCLUDED_PREFIXES)};
 
 // State
@@ -1864,6 +1960,55 @@ function renderFreeDates() {
     </div>\`).join('');
 }
 
+// ── Optional venues ──────────────────────────────────────────────────────────
+
+function renderOptionalVenues() {
+  const container = document.getElementById('optionalvenues-body');
+  const badge = document.getElementById('tab-badge-optionalvenues');
+
+  badge.textContent = OPTIONAL_VENUES.length;
+  badge.classList.toggle('none', OPTIONAL_VENUES.length === 0);
+
+  if (OPTIONAL_VENUES.length === 0) {
+    container.innerHTML = \`<tr><td colspan="7">
+      <div class="empty-state">
+        <div class="empty-icon">🏟️</div>
+        <p>אין משחקי חוץ קרובים לקבוצות שאולמן עשוי להתפנות</p>
+      </div>
+    </td></tr>\`;
+    return;
+  }
+
+  const dayNames = ['א׳','ב׳','ג׳','ד׳','ה׳','ו׳','ש׳'];
+  let html = '';
+  let lastGroupKey = null;
+
+  OPTIONAL_VENUES.forEach(item => {
+    const groupKey = item.date.slice(0, 10);
+    if (groupKey !== lastGroupKey) {
+      html += \`<tr class="date-group-header"><td colspan="7">\${formatDayLabel(groupKey)}</td></tr>\`;
+      lastGroupKey = groupKey;
+    }
+
+    const d = new Date(item.date);
+    html += \`<tr>
+      <td class="cell-date">
+        <div class="date-day">יום \${dayNames[d.getDay()]}</div>
+        <div class="date-full">\${d.getDate().toString().padStart(2,'0')}.\${(d.getMonth()+1).toString().padStart(2,'0')}.\${d.getFullYear()}</div>
+        <div class="date-time">\${item.timeLabel}</div>
+      </td>
+      <td class="cell-team">\${item.team}</td>
+      <td class="cell-league">\${item.league}</td>
+      <td class="cell-team">\${item.opponent}</td>
+      <td class="cell-venue">\${item.venue}</td>
+      <td>\${item.availFrom}–\${item.availTo}</td>
+      <td class="cell-link col-link">\${item.matchUrl ? \`<a href="\${item.matchUrl}" target="_blank" class="match-link" title="עמוד המשחק">↗</a>\` : ''}</td>
+    </tr>\`;
+  });
+
+  container.innerHTML = html;
+}
+
 // ── Tab switching
 document.querySelectorAll('.tab-btn').forEach(btn => {
   btn.addEventListener('click', () => {
@@ -1872,9 +2017,9 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
     btn.classList.add('active');
     document.getElementById('panel-' + btn.dataset.tab).classList.add('active');
     // Toolbar (location/team/sort filters) only applies to schedule + conflicts,
-    // not free-dates
+    // not free-dates or optional-venues
     document.querySelector('.toolbar').style.display =
-      btn.dataset.tab === 'freedates' ? 'none' : '';
+      (btn.dataset.tab === 'freedates' || btn.dataset.tab === 'optionalvenues') ? 'none' : '';
   });
 });
 
@@ -1999,6 +2144,7 @@ render();
 renderConflicts();
 renderFreeDates();
 renderActiveFilters();
+renderOptionalVenues();
 </script>
 
 <div class="email-modal-overlay" id="email-overlay" onclick="closeEmailModal()">
@@ -2049,10 +2195,10 @@ async function main() {
   console.log("================================");
   console.log("Fetching all season matches…");
 
-  const matches = await fetchAllMatches();
+  const { matches, optionalVenues } = await fetchAllMatches();
   console.log(`  ✓ ${matches.length} matches fetched`);
 
-  const html = buildHtml(matches);
+  const html = buildHtml(matches, optionalVenues);
   writeFileSync(outFile, html, "utf8");
   console.log(`  ✓ Report written to ${outFile}`);
   console.log(`\nOpen with:  open ${outFile}`);
