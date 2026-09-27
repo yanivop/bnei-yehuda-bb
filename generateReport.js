@@ -975,6 +975,96 @@ function buildHtml(matches, optionalVenues) {
     color: var(--muted);
     margin-top: 1px;
   }
+
+  /* ── OPTIONAL VENUES ── */
+  .venues-wrap {
+    max-width: 1300px;
+    margin: 0 auto;
+    padding: 0 40px 60px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .venue-empty {
+    text-align: center;
+    padding: 80px 24px;
+    color: var(--muted);
+    font-size: 15px;
+    font-weight: 500;
+  }
+  .venue-empty .empty-icon { font-size: 48px; margin-bottom: 12px; }
+
+  .venue-date-header {
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-top: 8px;
+  }
+  .venue-date-header:first-child { margin-top: 0; }
+
+  .venue-card {
+    background: white;
+    border-radius: 12px;
+    border: 1.5px solid var(--line);
+    overflow: hidden;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.05);
+  }
+  .venue-card-main {
+    padding: 14px 18px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    flex-wrap: wrap;
+  }
+  .venue-card-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--cool);
+    margin-bottom: 3px;
+  }
+  .venue-card-venue { font-size: 16px; font-weight: 700; color: var(--text); }
+  .venue-card-time {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 26px;
+    letter-spacing: 0.03em;
+    color: var(--cool);
+    white-space: nowrap;
+  }
+  .venue-card-meta {
+    padding: 9px 18px;
+    border-top: 1px solid var(--line);
+    background: var(--cream);
+    font-size: 12px;
+    color: var(--muted);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+  }
+  .venue-card-meta .team-line { font-weight: 700; color: var(--text); }
+  .venue-card-meta .match-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 6px;
+    font-size: 12px;
+    color: var(--muted);
+    text-decoration: none;
+    flex-shrink: 0;
+    transition: background 0.12s, color 0.12s;
+  }
+  .venue-card-meta .match-link:hover { background: var(--orange); color: #fff; }
+
   .email-btn {
     margin-top: 7px;
     padding: 4px 10px;
@@ -1302,6 +1392,9 @@ function buildHtml(matches, optionalVenues) {
 
     /* Conflicts */
     .conflicts-wrap { padding: 0 12px 48px; }
+    .venues-wrap { padding: 0 12px 48px; }
+    .venue-card-main { padding: 12px 14px; }
+    .venue-card-meta { padding: 8px 14px; flex-direction: column; align-items: flex-start; gap: 4px; }
 
     /* Free dates */
     .freedates-wrap { padding: 0 12px 48px; }
@@ -1434,24 +1527,7 @@ function buildHtml(matches, optionalVenues) {
 
 <!-- TAB 4: OPTIONAL VENUES -->
 <div class="tab-panel" id="panel-optionalvenues">
-  <main class="main">
-    <div class="table-wrap">
-      <table id="optionalvenues-table">
-        <thead>
-          <tr>
-            <th class="col-date">תאריך</th>
-            <th>קבוצה</th>
-            <th class="col-league">ליגה</th>
-            <th>יריב (בית)</th>
-            <th>אולם פנוי</th>
-            <th>זמינות</th>
-            <th class="col-link"></th>
-          </tr>
-        </thead>
-        <tbody id="optionalvenues-body"></tbody>
-      </table>
-    </div>
-  </main>
+  <div class="venues-wrap" id="optionalvenues-body"></div>
 </div>
 
 <footer class="report-footer">
@@ -1970,40 +2046,37 @@ function renderOptionalVenues() {
   badge.classList.toggle('none', OPTIONAL_VENUES.length === 0);
 
   if (OPTIONAL_VENUES.length === 0) {
-    container.innerHTML = \`<tr><td colspan="7">
-      <div class="empty-state">
+    container.innerHTML = \`
+      <div class="venue-empty">
         <div class="empty-icon">🏟️</div>
         <p>אין משחקי חוץ קרובים לקבוצות שאולמן עשוי להתפנות</p>
-      </div>
-    </td></tr>\`;
+      </div>\`;
     return;
   }
 
-  const dayNames = ['א׳','ב׳','ג׳','ד׳','ה׳','ו׳','ש׳'];
   let html = '';
   let lastGroupKey = null;
 
   OPTIONAL_VENUES.forEach(item => {
     const groupKey = item.date.slice(0, 10);
     if (groupKey !== lastGroupKey) {
-      html += \`<tr class="date-group-header"><td colspan="7">\${formatDayLabel(groupKey)}</td></tr>\`;
+      html += \`<div class="venue-date-header">\${formatDayLabel(groupKey)}</div>\`;
       lastGroupKey = groupKey;
     }
 
-    const d = new Date(item.date);
-    html += \`<tr>
-      <td class="cell-date">
-        <div class="date-day">יום \${dayNames[d.getDay()]}</div>
-        <div class="date-full">\${d.getDate().toString().padStart(2,'0')}.\${(d.getMonth()+1).toString().padStart(2,'0')}.\${d.getFullYear()}</div>
-        <div class="date-time">\${item.timeLabel}</div>
-      </td>
-      <td class="cell-team">\${item.team}</td>
-      <td class="cell-league">\${item.league}</td>
-      <td class="cell-team">\${item.opponent}</td>
-      <td class="cell-venue">\${item.venue}</td>
-      <td>\${item.availFrom}–\${item.availTo}</td>
-      <td class="cell-link col-link">\${item.matchUrl ? \`<a href="\${item.matchUrl}" target="_blank" class="match-link" title="עמוד המשחק">↗</a>\` : ''}</td>
-    </tr>\`;
+    html += \`<div class="venue-card">
+      <div class="venue-card-main">
+        <div>
+          <div class="venue-card-label">🏟️ יחידה פנויה</div>
+          <div class="venue-card-venue">\${item.venue}</div>
+        </div>
+        <div class="venue-card-time">\${item.availFrom}–\${item.availTo}</div>
+      </div>
+      <div class="venue-card-meta">
+        <span class="team-line">\${item.team} · \${item.league}</span>
+        <span>משחק חוץ מול \${item.opponent} · \${item.timeLabel}\${item.matchUrl ? \` <a href="\${item.matchUrl}" target="_blank" class="match-link" title="עמוד המשחק">↗</a>\` : ''}</span>
+      </div>
+    </div>\`;
   });
 
   container.innerHTML = html;
