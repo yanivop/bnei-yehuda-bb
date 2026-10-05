@@ -36,7 +36,10 @@ const OPTIONAL_VENUE_LEAGUES = new Set([
 // Update this list whenever the Google Form is updated.
 // Format: "[league] | [home team] - [away team]"  (exactly as it appears in the form)
 const TRANSPORT_FORM_OPTIONS = new Set([
-  "אין משחקים רלוונטיים לשבוע הקרוב",
+  "נערות א על | הפועל ראשון לציון - בני יהודה תל אביב",
+  "גביע המדינה לילדות א | הפועל תל אביב - בני יהודה תל אביב",
+  "נערות ב על | מכבי תל אביב תמר - בני יהודה תל אביב",
+  "ילדים א תל אביב | עירוני קריית אונו זמ - בני יהודה תל אביב",
 ]);
 
 // ─── API ──────────────────────────────────────────────────────────────────────
