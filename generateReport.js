@@ -625,6 +625,24 @@ function buildHtml(matches, optionalVenues) {
   }
   .transport-btn:hover { background: var(--orange); color: #fff; border-color: var(--orange); }
 
+  .change-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-top: 5px;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--blue, #2563eb);
+    background: rgba(37,99,235,0.08);
+    cursor: pointer;
+    border: 1px solid rgba(37,99,235,0.25);
+    white-space: nowrap;
+    transition: background 0.12s, color 0.12s;
+  }
+  .change-btn:hover { background: var(--blue, #2563eb); color: #fff; border-color: var(--blue, #2563eb); }
+
   tbody tr {
     border-bottom: 1px solid var(--line);
     transition: background 0.12s;
@@ -1790,6 +1808,7 @@ function render() {
         \${genderDot}\${m.league}
         \${venue !== '—' ? \`<span class="venue-inline"> · 📍 \${venue}</span>\` : ''}
         \${!ourTeamIsHome && m.hasTransport ? \`<br><a href="\${buildTransportUrl(m)}" target="_blank" class="transport-btn">🚌 הזמן הסעה</a>\` : ''}
+        <br><button class="change-btn" onclick='openEmailModal(\${JSON.stringify(m).replace(/'/g, "&#39;")})'>✉ בקש שינוי</button>
       </td>
       <td class="cell-venue col-venue">\${venue}</td>
       <td class="cell-link col-link">\${m.matchUrl ? \`<a href="\${m.matchUrl}" target="_blank" class="match-link" title="עמוד המשחק">↗</a>\` : ''}</td>
