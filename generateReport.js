@@ -536,6 +536,22 @@ function buildHtml(matches, optionalVenues) {
   .team-item-name { font-size: 14px; font-weight: 600; color: var(--text); }
   .team-item-league { font-size: 11px; font-weight: 500; color: var(--muted); }
 
+  .team-menu-footer { padding: 10px 16px 2px; margin-top: 8px; border-top: 1px solid var(--line); }
+  .btn-team-apply {
+    width: 100%;
+    padding: 9px;
+    border-radius: 8px;
+    border: none;
+    background: var(--orange);
+    color: #fff;
+    font-family: 'Heebo', sans-serif;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: opacity 0.12s;
+  }
+  .btn-team-apply:hover { opacity: 0.88; }
+
   /* Mobile overlay backdrop */
   .menu-backdrop {
     display: none;
@@ -1469,6 +1485,9 @@ function buildHtml(matches, optionalVenues) {
             </div>
           </div>
           <div id="team-checkboxes"></div>
+          <div class="team-menu-footer">
+            <button class="btn-team-apply" onclick="closeTeamMenu()">✓ אישור</button>
+          </div>
         </div>
       </div>
     </div>
