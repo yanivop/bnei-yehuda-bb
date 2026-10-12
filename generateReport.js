@@ -44,12 +44,24 @@ const TRANSPORT_FORM_OPTIONS = new Set([
 
 // ─── API ──────────────────────────────────────────────────────────────────────
 
+const RETRY_DELAYS_MS = [1000, 3000, 9000];
+
 async function apiFetch(endpoint, params = {}) {
   const url = new URL(`${CONFIG.baseUrl}/${endpoint}`);
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
-  const res = await fetch(url.toString());
-  if (!res.ok) throw new Error(`API ${res.status}: ${url}`);
-  return { data: await res.json(), headers: res.headers };
+
+  let lastError;
+  for (let attempt = 0; attempt <= RETRY_DELAYS_MS.length; attempt++) {
+    const res = await fetch(url.toString());
+    if (res.ok) return { data: await res.json(), headers: res.headers };
+    lastError = new Error(`API ${res.status}: ${url}`);
+    if (attempt < RETRY_DELAYS_MS.length) {
+      const delay = RETRY_DELAYS_MS[attempt];
+      console.log(`  ⚠ ${lastError.message} — retrying in ${delay / 1000}s…`);
+      await new Promise(r => setTimeout(r, delay));
+    }
+  }
+  throw lastError;
 }
 
 function decodeHtml(str) {
