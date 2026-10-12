@@ -67,14 +67,18 @@ function updateFile(options) {
     options.map((o) => `  ${JSON.stringify(o)},`).join("\n") +
     `\n]);`;
 
-  const updated = src.replace(
-    /const TRANSPORT_FORM_OPTIONS = new Set\(\[[\s\S]*?\]\);/,
-    newBlock
-  );
+  const pattern = /const TRANSPORT_FORM_OPTIONS = new Set\(\[[\s\S]*?\]\);/;
+  if (!pattern.test(src)) throw new Error("Pattern not found — could not update TRANSPORT_FORM_OPTIONS");
 
-  if (updated === src) throw new Error("Pattern not found — could not update TRANSPORT_FORM_OPTIONS");
+  const updated = src.replace(pattern, newBlock);
+
+  if (updated === src) {
+    console.log("No changes — options already up to date");
+    return false;
+  }
 
   writeFileSync(REPORT_FILE, updated, "utf8");
+  return true;
 }
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
@@ -83,5 +87,4 @@ const options = await fetchOptions();
 console.log(`Fetched ${options.length} options:`);
 options.forEach((o) => console.log(`  • ${o}`));
 
-updateFile(options);
-console.log("✓ generateReport.js updated");
+if (updateFile(options)) console.log("✓ generateReport.js updated");
