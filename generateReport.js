@@ -52,7 +52,11 @@ async function apiFetch(endpoint, params = {}) {
 
   let lastError;
   for (let attempt = 0; attempt <= RETRY_DELAYS_MS.length; attempt++) {
-    const res = await fetch(url.toString());
+    const res = await fetch(url.toString(), {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36",
+      },
+    });
     if (res.ok) return { data: await res.json(), headers: res.headers };
     lastError = new Error(`API ${res.status}: ${url}`);
     if (attempt < RETRY_DELAYS_MS.length) {
