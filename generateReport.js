@@ -7,7 +7,9 @@
 import { writeFileSync } from "fs";
 
 const CONFIG = {
-  baseUrl: "https://ibasketball.co.il/wp-json/sportspress/v2",
+  // Routed through a Cloudflare Worker proxy (see local-automation/cf-worker-proxy.js) —
+  // ibasketball.co.il's WAF blocks GitHub Actions' IP ranges directly.
+  baseUrl: "https://ibba-proxy.yanivop.workers.dev/wp-json/sportspress/v2",
   seasonId: "119888",
   clubId: "715472",
   perPage: 100,
